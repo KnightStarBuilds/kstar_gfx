@@ -1,0 +1,221 @@
+{
+  "dependencies": [
+    {
+      "name": "cgltf",
+      "repository": "https://github.com/jkuhlmann/cgltf",
+      "revision": "360db1a95480fe102ae9c69b27c5d101167ff5ba",
+      "url": "https://codeload.github.com/jkuhlmann/cgltf/tar.gz/360db1a95480fe102ae9c69b27c5d101167ff5ba",
+      "sha256": "445d135cf793232ae6a585ca1404e4ff28d4f4dbca070689034fe780370ac84a",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "cgltf.txt"
+        }
+      ]
+    },
+    {
+      "name": "stb",
+      "repository": "https://github.com/nothings/stb",
+      "revision": "2c980bb59875b0d32144a71867fbdebb2f77cd20",
+      "url": "https://codeload.github.com/nothings/stb/tar.gz/2c980bb59875b0d32144a71867fbdebb2f77cd20",
+      "sha256": "9a955b1b49a4410088a2e0ee2a9c057c3c907d0c1d75454144cb980aca0ba515",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "stb.txt"
+        }
+      ]
+    },
+    {
+      "name": "tinyexr",
+      "repository": "https://github.com/syoyo/tinyexr",
+      "revision": "v1.0.12",
+      "url": "https://codeload.github.com/syoyo/tinyexr/tar.gz/v1.0.12",
+      "sha256": "e3383703d6eaf175a3f36dfc23ec5c8a22e61ddc3acd05dd442cb33ce7af0d39",
+      "licenses": [
+        {
+          "source": "tinyexr.h",
+          "destination": "TinyEXR-licenses-in-header.txt"
+        },
+        {
+          "source": "deps/miniz/LICENSE",
+          "destination": "miniz.txt"
+        }
+      ]
+    },
+    {
+      "name": "glslang",
+      "repository": "https://github.com/KhronosGroup/glslang",
+      "revision": "15.4.0",
+      "url": "https://codeload.github.com/KhronosGroup/glslang/tar.gz/15.4.0",
+      "sha256": "b16c78e7604b9be9f546ee35ad8b6db6f39bbbbfb19e8d038b6fe2ea5bba4ff4",
+      "licenses": [
+        {
+          "source": "LICENSE.txt",
+          "destination": "glslang.txt"
+        }
+      ]
+    },
+    {
+      "name": "spirv-cross",
+      "repository": "https://github.com/KhronosGroup/SPIRV-Cross",
+      "revision": "vulkan-sdk-1.4.321.0",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Cross/tar.gz/vulkan-sdk-1.4.321.0",
+      "sha256": "6037555620c27105bf1d4068a6eeb4b0d7953630d556a1ca9799dfe06fd2fb68",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "spirv-cross.txt"
+        }
+      ]
+    },
+    {
+      "name": "spirv-tools",
+      "repository": "https://github.com/KhronosGroup/SPIRV-Tools",
+      "revision": "vulkan-sdk-1.4.321.0",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Tools/tar.gz/vulkan-sdk-1.4.321.0",
+      "sha256": "8327fb8f3e9472346a004c91dbb83a6e5f3b36c3846c142cf8c0dc8fac8710f3",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "spirv-tools.txt"
+        }
+      ]
+    },
+    {
+      "name": "spirv-headers",
+      "repository": "https://github.com/KhronosGroup/SPIRV-Headers",
+      "revision": "vulkan-sdk-1.4.321.0",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/vulkan-sdk-1.4.321.0",
+      "sha256": "5bbea925663d4cd2bab23efad53874f2718248a73dcaf9dd21dff8cb48e602fc",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "spirv-headers.txt"
+        }
+      ]
+    },
+    {
+      "name": "opengnm-psbc",
+      "repository": "https://github.com/KnightStarBuilds/opengnm-psbc",
+      "revision": "a92a1228ea3a64e4be9f0e61c2a65a5aa7ffed92",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "opengnm-psbc.txt"
+        }
+      ],
+      "kind": "submodule",
+      "path": "deps/opengnm-psbc",
+      "revision_role": "Initial gitlink; active checkout and working-tree content are recorded by each build"
+    },
+    {
+      "name": "mako",
+      "revision": "1.3.10",
+      "url": "https://files.pythonhosted.org/packages/9e/38/bd5b78a920a64d708fe6bc8e0a2c075e1389d53bef8413725c63ba041535/mako-1.3.10.tar.gz",
+      "sha256": "99579a6f39583fa7e5630a28c3c1f440e4e97a414b80372649c0ce338da2ea28",
+      "repository": "https://github.com/sqlalchemy/mako",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "mako.txt"
+        }
+      ]
+    },
+    {
+      "name": "markupsafe",
+      "revision": "3.0.3",
+      "url": "https://files.pythonhosted.org/packages/7e/99/7690b6d4034fffd95959cbe0c02de8deb3098cc577c67bb6a24fe5d7caa7/markupsafe-3.0.3.tar.gz",
+      "sha256": "722695808f4b6457b320fdc131280796bdceb04ab50fe1795cd540799ebe1698",
+      "repository": "https://github.com/pallets/markupsafe",
+      "licenses": [
+        {
+          "source": "LICENSE.txt",
+          "destination": "markupsafe.txt"
+        }
+      ]
+    },
+    {
+      "name": "vulkan-headers",
+      "revision": "vulkan-sdk-1.4.321.0",
+      "url": "https://codeload.github.com/KhronosGroup/Vulkan-Headers/tar.gz/vulkan-sdk-1.4.321.0",
+      "sha256": "17f8ff30fd79fb7531efcb7c78c02c17a595208d482a150f06836b0ca97ef8f2",
+      "repository": "https://github.com/KhronosGroup/Vulkan-Headers",
+      "licenses": [
+        {
+          "source": "LICENSE.md",
+          "destination": "vulkan-headers.txt"
+        },
+        {
+          "source": "LICENSES/Apache-2.0.txt",
+          "destination": "vulkan-headers-Apache-2.0.txt"
+        },
+        {
+          "source": "LICENSES/MIT.txt",
+          "destination": "vulkan-headers-MIT.txt"
+        }
+      ]
+    },
+    {
+      "name": "mikktspace",
+      "repository": "https://github.com/mmikk/MikkTSpace",
+      "revision": "3e895b49d05ea07e4c2133156cfa94369e19e409",
+      "url": "https://codeload.github.com/mmikk/MikkTSpace/tar.gz/3e895b49d05ea07e4c2133156cfa94369e19e409",
+      "sha256": "aeba65ddee85a679133d510d71d00b108f603752f90b15b9ecf7777033f6e351",
+      "licenses": [
+        {
+          "source": "mikktspace.h",
+          "destination": "MikkTSpace-license-in-header.txt"
+        }
+      ]
+    },
+    {
+      "name": "pyyaml",
+      "repository": "https://github.com/yaml/pyyaml",
+      "revision": "6.0.3",
+      "url": "https://files.pythonhosted.org/packages/05/8e/961c0007c59b8dd7729d542c61a4d537767a59645b82a0b521206e1e25c2/pyyaml-6.0.3.tar.gz",
+      "sha256": "d76623373421df22fb4cf8817020cbb7ef15c725b9d5e45f17e189bfc384190f",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "PyYAML.txt"
+        }
+      ]
+    },
+    {
+      "name": "vulkan-headers-psbc",
+      "repository": "https://github.com/KhronosGroup/Vulkan-Headers",
+      "revision": "v1.4.354",
+      "url": "https://codeload.github.com/KhronosGroup/Vulkan-Headers/tar.gz/v1.4.354",
+      "sha256": "4ca3606e57728febf8aef097c9d7ba6c52385955bb4a6dc06fcf9fc3d76541de",
+      "licenses": [
+        {
+          "source": "LICENSE.md",
+          "destination": "Vulkan-Headers-PSBC.txt"
+        },
+        {
+          "source": "LICENSES/Apache-2.0.txt",
+          "destination": "vulkan-headers-psbc-Apache-2.0.txt"
+        },
+        {
+          "source": "LICENSES/MIT.txt",
+          "destination": "vulkan-headers-psbc-MIT.txt"
+        }
+      ]
+    },
+    {
+      "name": "opengnm",
+      "repository": "https://github.com/KnightStarBuilds/opengnm",
+      "revision": "4b295ca54c82c83acf308d1c646a2dfa9ae57350",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "opengnm.txt"
+        }
+      ],
+      "kind": "submodule",
+      "path": "deps/opengnm",
+      "revision_role": "Initial gitlink; active checkout and working-tree content are recorded by each build"
+    }
+  ]
+}

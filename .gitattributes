@@ -1,0 +1,51 @@
+# Set default behavior to automatically normalize line endings:
+* text=auto
+
+# Handle file types explicitly by extension:
+# Source files (C++, JSON, CMake, etc.) should be normalized (LF in repo, OS-dependent locally)
+*.cpp text
+*.hpp text
+*.h text
+*.c text
+*.inl text
+*.json text
+*.txt text
+*.md text
+*.yml text
+*.yaml text
+*.xml text
+*.cmake text
+
+# Shell scripts must use LF
+*.sh text eol=lf
+
+# Windows batch files and Visual Studio files must use CRLF
+*.bat text eol=crlf
+*.sln text eol=crlf
+*.vcxproj text eol=crlf
+*.filters text eol=crlf
+*.vcproj text eol=crlf
+
+# Binary files - mark them as binary to prevent normalization
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.lib binary
+*.out binary
+*.a binary
+*.so binary
+*.o binary
+*.obj binary
+*.pdb binary
+*.suo binary
+*.user binary
+*.ncb binary

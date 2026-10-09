@@ -1,0 +1,121 @@
+{
+  "schema": 1,
+  "target": "base-PS4 GFX7",
+  "dependencies": [
+    {
+      "name": "glslang",
+      "repository": "https://github.com/KhronosGroup/glslang",
+      "revision": "15.4.0",
+      "url": "https://codeload.github.com/KhronosGroup/glslang/tar.gz/15.4.0",
+      "sha256": "b16c78e7604b9be9f546ee35ad8b6db6f39bbbbfb19e8d038b6fe2ea5bba4ff4",
+      "licenses": [
+        {
+          "source": "LICENSE.txt",
+          "destination": "glslang.txt"
+        }
+      ]
+    },
+    {
+      "name": "spirv-tools",
+      "repository": "https://github.com/KhronosGroup/SPIRV-Tools",
+      "revision": "vulkan-sdk-1.4.321.0",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Tools/tar.gz/vulkan-sdk-1.4.321.0",
+      "sha256": "8327fb8f3e9472346a004c91dbb83a6e5f3b36c3846c142cf8c0dc8fac8710f3",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "spirv-tools.txt"
+        }
+      ]
+    },
+    {
+      "name": "spirv-headers",
+      "repository": "https://github.com/KhronosGroup/SPIRV-Headers",
+      "revision": "vulkan-sdk-1.4.321.0",
+      "url": "https://codeload.github.com/KhronosGroup/SPIRV-Headers/tar.gz/vulkan-sdk-1.4.321.0",
+      "sha256": "5bbea925663d4cd2bab23efad53874f2718248a73dcaf9dd21dff8cb48e602fc",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "spirv-headers.txt"
+        }
+      ]
+    },
+    {
+      "name": "opengnm-psbc",
+      "repository": "https://github.com/KnightStarBuilds/opengnm-psbc",
+      "revision": "a92a1228ea3a64e4be9f0e61c2a65a5aa7ffed92",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "opengnm-psbc.txt"
+        }
+      ],
+      "kind": "submodule",
+      "path": "deps/opengnm-psbc",
+      "revision_role": "Initial gitlink; active checkout and working-tree content are recorded by each build"
+    },
+    {
+      "name": "opengnm",
+      "repository": "https://github.com/KnightStarBuilds/opengnm",
+      "revision": "4b295ca54c82c83acf308d1c646a2dfa9ae57350",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "opengnm.txt"
+        }
+      ],
+      "kind": "submodule",
+      "path": "deps/opengnm",
+      "revision_role": "Initial gitlink; active checkout and working-tree content are recorded by each build"
+    }
+  ],
+  "forks": {
+    "opengnm": {
+      "schema": 1,
+      "name": "opengnm",
+      "revision": "4b295ca54c82c83acf308d1c646a2dfa9ae57350",
+      "tree_sha256": "8f6ad29be78024203973b28a2a5d18bd9221d7e20ef6921c8ca8386f1827d4ab",
+      "identity": "2d58f27be82913ffbd9b182c09cbcd93adacb3df21f6b855c398404107f738df",
+      "dirty": true
+    },
+    "opengnm-psbc": {
+      "schema": 1,
+      "name": "opengnm-psbc",
+      "revision": "a92a1228ea3a64e4be9f0e61c2a65a5aa7ffed92",
+      "tree_sha256": "fe30de26a015a74a44660e30832bfe4fa45177f6f72cbfedadf0dfa137e6d134",
+      "identity": "71599d1b232e00a7433406df4261d44f1cb29c98333adce538f61cce981e20d0",
+      "dirty": true
+    }
+  },
+  "generator_sha256": "e2b7143db773ededf9691272f7498db7d90040e1a9c7533386eb00f3e9830e23",
+  "packaging_sha256": "589dd917f162ccfa75027a7b6d8ce05dfbea6e1d21bc924ac9016613f9c5e4c1",
+  "validation_sha256": "8b655e45303209603aafbe9bc750645c177fe268b146e4d068e413f2cbdc8201",
+  "stages": {
+    "resolve_vert": {
+      "source_sha256": "2ecd6609a227c31eaf1f763ddfe638191bab6c5db28afd624023f055ed28bce5",
+      "spirv_sha256": "c0cb4ad11f89ca0eede8644b75cadea8e3a774c371c91a84851a708ee296ad0c",
+      "native_package_sha256": "2e3ba3280098d9e6956a3310208854307f1d29672cf1dae8fc17f7996bf3f6a0"
+    },
+    "resolve_frag": {
+      "source_sha256": "3ed30926b2d03a5715111b1a94930f55a006498546e63abd7b02b9f51b6edbd0",
+      "spirv_sha256": "636ec3198c687f03ae79f8aeed36b79245de78262e6725380f82bbe88fc710c7",
+      "native_package_sha256": "0afb0ae1180df809abb68318c81f6dbea76916e6fbd662f2b1b89f55d8b6ee9d"
+    },
+    "clear_depth_frag": {
+      "source_sha256": "b068684ee4532c9ddcb6e8a361dcc43c6900a8bed47219317f5443b0076a620d",
+      "spirv_sha256": "989a771cb21ad770c937f5d782393c3af46b06f74f2760d15c146e6fe9809744",
+      "native_package_sha256": "448d7ed6449022c5395a853c696cf89f6cd303ac9f9692f43477016767a9e494"
+    },
+    "clear_color_frag": {
+      "source_sha256": "29f3641ff388827ff93f24207ed95cbb3f3e6e6b9b0d1b7f8d07b963bb41a615",
+      "spirv_sha256": "20bb6dbe4d648c9b754b1e29028c7c4699625a53c902fbddceee9d7a7d628cb1",
+      "native_package_sha256": "4110f2d4ef86cd392faa0430a18a2f570a7a7b3b086de00dafb1cfccafc32c04"
+    },
+    "copy_color_frag": {
+      "source_sha256": "7733e6ca64744ac97512b37d6e3286c3bbf28475dbde874ae2407b79862fe849",
+      "spirv_sha256": "5e4dd5e24bdef6b546a79ef9858a5be942b4b7209543499909fef3169996b838",
+      "native_package_sha256": "6bf898da4ffe29ac293759bbab0b16ac75ee6279e910c8b7406caab10c6a28b1"
+    }
+  }
+}

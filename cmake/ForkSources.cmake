@@ -1,0 +1,105 @@
+# SPDX-License-Identifier: MIT
+include_guard(GLOBAL)
+
+# Git owns these editable source trees. Build only snapshots, including local
+# tracked/untracked source edits, so code generation never dirties a submodule.
+function(kgfx_fork_source source name destination out_identity)
+    find_package(Git REQUIRED)
+    get_filename_component(source "${source}" ABSOLUTE)
+    if(NOT EXISTS "${source}/.git")
+        message(FATAL_ERROR "Missing ${name} submodule; run git submodule update --init --recursive")
+    endif()
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${source}" rev-parse --show-toplevel
+        OUTPUT_VARIABLE top OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+    if(NOT top STREQUAL source)
+        message(FATAL_ERROR "Expected a separate Git working tree at ${source}")
+    endif()
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${source}" rev-parse HEAD
+        OUTPUT_VARIABLE revision OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${source}" -c core.quotepath=false
+        ls-files --cached --others --exclude-standard
+        OUTPUT_VARIABLE inventory OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+    string(REPLACE ";" "\\;" inventory "${inventory}")
+    string(REPLACE "\n" ";" inventory "${inventory}")
+    list(REMOVE_DUPLICATES inventory)
+    list(SORT inventory)
+    set(entries "")
+    set(files)
+    foreach(path IN LISTS inventory)
+        # Git quotes control characters in newline-delimited output. Reject such
+        # names rather than hashing/copying a different path accidentally.
+        if(path MATCHES "^\"" OR IS_ABSOLUTE "${path}" OR path MATCHES "(^|/)\\.\\.(/|$)")
+            message(FATAL_ERROR "Unsupported fork source pathname: ${path}")
+        endif()
+        set(input "${source}/${path}")
+        if(IS_SYMLINK "${input}")
+            file(READ_SYMLINK "${input}" link)
+            string(SHA256 hash "${link}")
+            set(kind link)
+        elseif(EXISTS "${input}" AND NOT IS_DIRECTORY "${input}")
+            file(SHA256 "${input}" hash)
+            set(kind file)
+        elseif(IS_DIRECTORY "${input}")
+            message(FATAL_ERROR "Nested gitlink requires explicit snapshot support: ${input}")
+        else()
+            continue() # Locally deleted tracked files are absent from the copy.
+        endif()
+        list(APPEND files "${path}")
+        string(APPEND entries "${path}\t${kind}\t${hash}\n")
+    endforeach()
+    string(SHA256 tree_hash "${entries}")
+    string(SHA256 identity "kstar-gfx-submodule-v1\n${revision}\n${tree_hash}\n")
+    execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${source}" status --porcelain --untracked-files=all
+        OUTPUT_VARIABLE status OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+    set(dirty false)
+    if(NOT status STREQUAL "")
+        set(dirty true)
+    endif()
+    set(manifest "{\n  \"schema\": 1,\n  \"name\": \"${name}\",\n  \"revision\": \"${revision}\",\n  \"tree_sha256\": \"${tree_hash}\",\n  \"identity\": \"${identity}\",\n  \"dirty\": ${dirty}\n}\n")
+    if(destination)
+        get_filename_component(destination "${destination}" ABSOLUTE)
+        cmake_path(IS_PREFIX source "${destination}" NORMALIZE overlaps)
+        cmake_path(IS_PREFIX destination "${source}" NORMALIZE contains_source)
+        if(overlaps OR contains_source)
+            message(FATAL_ERROR "Fork build output must be outside its working tree: ${destination}")
+        endif()
+        set(marker "${destination}/.kgfx-source.json")
+        set(old_identity "")
+        if(EXISTS "${marker}")
+            file(READ "${marker}" previous)
+            string(JSON old_identity ERROR_VARIABLE ignored GET "${previous}" identity)
+        endif()
+        if(NOT old_identity STREQUAL identity)
+            if(EXISTS "${destination}" AND NOT EXISTS "${marker}" AND
+               NOT EXISTS "${destination}/.kgfx-revision" AND
+               NOT EXISTS "${destination}/.kgfx-verified")
+                message(FATAL_ERROR "Refusing to replace an unowned source directory: ${destination}")
+            endif()
+            file(REMOVE_RECURSE "${destination}")
+            file(MAKE_DIRECTORY "${destination}")
+            foreach(path IN LISTS files)
+                get_filename_component(parent "${destination}/${path}" DIRECTORY)
+                file(MAKE_DIRECTORY "${parent}")
+                file(COPY "${source}/${path}" DESTINATION "${parent}")
+            endforeach()
+        endif()
+        file(WRITE "${marker}" "${manifest}")
+        file(WRITE "${destination}/.kgfx-source-files" "${entries}")
+    endif()
+    if(NOT CMAKE_SCRIPT_MODE_FILE)
+        # The glob notices added/deleted local source files; per-file dependencies
+        # notice edits, even when Git's index and commit have not changed.
+        file(GLOB_RECURSE watch CONFIGURE_DEPENDS LIST_DIRECTORIES FALSE "${source}/*")
+        execute_process(COMMAND "${GIT_EXECUTABLE}" -C "${source}" rev-parse --absolute-git-dir
+            OUTPUT_VARIABLE git_dir OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            ${watch} "${git_dir}/HEAD" "${git_dir}/index")
+    endif()
+    set(${out_identity} "${manifest}" PARENT_SCOPE)
+endfunction()
+
+# Script-mode entry point used by the offline compiler driver.
+if(CMAKE_SCRIPT_MODE_FILE STREQUAL CMAKE_CURRENT_LIST_FILE)
+    kgfx_fork_source("${KGFX_FORK_SOURCE}" "${KGFX_FORK_NAME}" "${KGFX_FORK_DESTINATION}" result)
+    file(WRITE "${KGFX_FORK_MANIFEST}" "${result}")
+endif()

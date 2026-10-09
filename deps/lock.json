@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "dependencies": [
+    {
+      "name": "sdl2",
+      "version": "2.30.0",
+      "url": "https://www.libsdl.org/release/SDL2-2.30.0.tar.gz",
+      "archive": "sdl2-2.30.0.tar.gz",
+      "sha256": "36e2e41557e0fa4a1519315c0f5958a87ccb27e25c51776beb6f1239526447b0",
+      "license": "Zlib",
+      "license_files": [
+        "LICENSE.txt"
+      ],
+      "provenance": "SDL upstream release; desktop demo and test host only"
+    },
+    {
+      "name": "openorbis",
+      "version": "0.5.4-llvm18",
+      "url": "https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz",
+      "archive": "openorbis-0.5.4-llvm18.tar.gz",
+      "sha256": "3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526",
+      "license": "GPL-3.0 toolchain; MIT musl; Apache-2.0 with LLVM exceptions; LGPL-3.0 LibOrbisPkg",
+      "license_files": [
+        "PS4Toolchain/LICENSE",
+        "PS4Toolchain/bin/macos/LICENSE.txt"
+      ],
+      "provenance": "OpenOrbis upstream 0.5.4 LLVM18 release. External SDK selected by OO_PS4_TOOLCHAIN or --sdk; installed SDK override is recorded in build provenance."
+    }
+  ]
+}

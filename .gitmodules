@@ -1,0 +1,6 @@
+[submodule "opengnm"]
+	path = deps/opengnm
+	url = https://github.com/KnightStarBuilds/opengnm.git
+[submodule "opengnm-psbc"]
+	path = deps/opengnm-psbc
+	url = https://github.com/KnightStarBuilds/opengnm-psbc.git

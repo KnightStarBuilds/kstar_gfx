@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "sdk": "openorbis-0.5.4-llvm18",
+  "source_archive_sha256": "3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526",
+  "source_header": "include/bits/alltypes.h",
+  "source_header_sha256": "9327f8d406830c8a446de93bd35719b5128f66d22e640de707308e089afca1fe",
+  "maintained_header": "src/gnm/sdk-include/bits/alltypes.h",
+  "correction": "mode_t is unsigned short (16 bits), matching native PS4 stat layout and SDK libc++.",
+  "license": {
+    "path": "src/gnm/sdk-include/COPYRIGHT.musl",
+    "source": "https://raw.githubusercontent.com/OpenOrbis/musl/2b0bb8ce2fa64ac255cb656785729d159a5f074c/COPYRIGHT",
+    "sha256": "afe1df384787fce3577f3356b8b0d417381483f7c704eacb63f8050349fac77a"
+  }
+}

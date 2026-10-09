@@ -1,0 +1,58 @@
+/build/
+/.tmp/
+/.local-memory/
+/deps/tools/
+/deps/cache/
+/assets/*
+!/assets/manifest.json
+*.DS_Store
+imgui.ini
+
+__pycache__/
+*.pyc
+/deps/*.lock
+
+# Misc
+
+*.swp
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+nohup.out
+# macOS
+.DS_Store
+__MACOSX/
+.AppleDouble
+.LSOverride
+
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
