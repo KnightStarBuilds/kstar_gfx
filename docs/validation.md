@@ -2,14 +2,14 @@
 
 Desktop validation runs on macOS ARM64 with Apple Clang and an Apple A18 Pro GPU. GNM is cross-compiled with LLVM/OpenOrbis and tested separately through shadPS4. A successful compile is not evidence of rendered backend parity.
 
-| Check | macOS ARM64 OpenGL | PS4 GNM through shadPS4 fork `dd98d9e6` | Physical PS4 | Linux / Windows |
+| Check | macOS ARM64 OpenGL | PS4 GNM through current shadPS4 fork | Physical PS4 | Linux / Windows |
 |---|---|---|---|---|
 | C-compatible public API | Debug and Release passed | Debug and Release cross-build passed | Not run | Not run |
-| Clear, copy, completed GPU readback | Debug and Release passed | Full shader-feature probes passed in both emulator and guest configurations | Not run | Not run |
-| Blending, depth, scissor, MSAA resolve | Debug and Release passed | Full shader-feature probes passed in both emulator and guest configurations | Not run | Not run |
-| Frame slots and deferred resource retirement | Debug and Release passed | Visible flip completion and 124-frame resize/resource-retirement stress passed | Not run | Not run |
-| Six demo captures | Debug and Release passed, including both HDRIs and model detail views | 14/14 comparisons passed across both guest configurations, including both PBR HDRIs | Not run | Not run |
-| Configuration suites | 22 checks passed in Debug and Release | 26/26 full checks and 2/2 isolated discard checks across Debug/Release emulator and guest combinations | Not run | Not run |
+| Clear, copy, completed GPU readback | Debug and Release passed | Full shader-feature probes passed with matching Debug/Release emulator and guest configurations | Not run | Not run |
+| Blending, depth, scissor, MSAA resolve | Debug and Release passed | Full shader-feature probes passed with matching Debug/Release emulator and guest configurations | Not run | Not run |
+| Frame slots and deferred resource retirement | Debug and Release passed | 600-flip copied-command presentation and 124-frame resize/resource-retirement stress passed in Debug and Release | Not run | Not run |
+| Demo capture parity | Debug and Release passed, including both HDRIs and model detail views | 14/14 scene comparisons passed with matching Debug/Release emulator and guest configurations, including both PBR HDRIs | Not run | Not run |
+| Configuration suites | 22 checks passed in Debug and Release | 27/27 full checks and 2/2 isolated discard checks with matching Debug/Release emulator and guest configurations | Not run | Not run |
 | Offline rebuild / cache preservation | Passed, including isolated clean and C consumers | Core Debug/Release passed with Python discovery disabled; missing submodules rejected before clean | Not run | Not run |
 
 `kgfx_conformance` checks GPU pixels for blend/depth behavior, top-left upload/scissor/copy/readback coordinates, padded input rows, implicit uniform-buffer ranges, rejected attachment contracts, 4× MSAA resolve, repeated reuse of three upload slots, deferred resource destruction, and library draw-path C++ allocations. `tests/demo_capture_test.py` renders deterministic captures, checks triangle interpolation or scene visibility, and compares repeated output. Cooker tests check retained mesh topology, tangents, texture mip chains, alpha, floating-point HDR range, generated IBL assets and rough-reflection reconstruction against analytic directional lighting. Acquisition and packaging tests cover offline reuse, complete input preflight and failure rollback.
@@ -45,7 +45,11 @@ host-window checks verify visibility and quitting.
 The full shader probe covers culling/front-face state, vertex and instance
 fetch, first-vertex offsets, FP16/FP32 targets, HDR blending, depth sampling/copy,
 cubemap mips, transfers, resolve, discard and attachment contracts. A passing
-presentation probe does not imply these features pass.
+presentation probe does not imply these features pass. The overlap regression
+binds a 64 KiB uniform range followed by a 256 KiB vertex span from one buffer,
+then verifies changed data after rebinding and the untouched background clear.
+It exercises draw-binding migration; it does not cover GPU-written or atomic
+buffer aliases.
 
 On the installed 0.18.0 release, the full probe passes 24/26 checks in Debug and
 25/26 in Release. `DISCARD_KILL` fails in both configurations; `CLEAR` also fails
@@ -63,64 +67,57 @@ not establish stable visible emulation. A PBR run with the emulator's default
 command-buffer copying setting showed incorrect final material lighting, then
 stalled. It does not qualify as a scene or quit pass.
 
-The separate test fork uses branch `kstar-gfx-validation-0.18`, based on release
-`e3ce810f`, with these source commits at `dd98d9e6`:
+The current test fork uses branch `kstar-gfx` on upstream commit
+`0c9ca525b8add53e62b3ccd9c9c2f6ef2ebabbfa` (0.19.1), with maintained source
+changes for copied-command lifetimes, submission locking, valid-mask exports
+and resident-buffer support on devices without sparse buffers. The upstream
+base already includes the depth/stencil clear, comparison-sampler, front-face
+encoding and blank-frame scheduler fixes. Shader-cache versioning rejects
+binaries generated before the valid-mask change. The installed executable and
+Vulkan/KosmicKrisp libraries remain unchanged; no patch files or driver rewrites
+are used.
 
-| Commit | Behavior corrected |
-|---|---|
-| `d1adf55c` | Retain copied command storage until queued consumers finish and synchronize the submission gate. |
-| `54d42cdb` | Keep detile scratch ownership through the caller's final upload recording. |
-| `57dd26ac` | Preserve valid-mask exports when EXEC is empty so killed fragments can discard before depth writes. |
-| `61392dc1` | Initialize depth/stencil attachment clear flags; upstream backport. |
-| `16d00fb0` | Enable sampler comparison only for comparison fetches; upstream backport. |
-| `6cd76213` | Honor both integer and signed-float front-face encodings; upstream backport with regression tests. |
-| `dd98d9e6` | Use the presentation scheduler for blank frames instead of concurrently submitting the guest's command buffer; upstream backport. |
+The installed KosmicKrisp driver reports `sparseBinding=0` and
+`sparseResidencyBuffer=0`. The newer upstream buffer cache attempts to obtain a
+device address from an unbound sparse arena on this device and aborts before
+the first probe completes. The fork selects a resident-buffer path using 64 KiB
+pages, bounded growth padding and GPU copies when overlapping ranges grow.
+Migration updates resident page-table entries, retains retired buffers through
+submission completion and retries resource binding if migration changes earlier
+bindings. Fast-clear metadata is consumed only after the binding attempt is
+accepted; pending image barriers survive retries.
 
-The rebuilt unmodified 0.18 baseline reproduces the Metal buffer-to-image crash:
-the copy reaches an invalid or nil source buffer. Without an open VideoOut port,
-the presentation thread incorrectly uses the guest's draw scheduler, allowing
-it to submit and replace a command buffer while guest texture operations are
-still being recorded. The scheduler fix separates these owners; scratch
-ownership also lasts through the caller's final upload recording. The installed
-executable and Vulkan/KosmicKrisp libraries remain unchanged; the fixes are in
-the separate emulator source checkout and have not been pushed.
+Both emulator configurations build. The Release executable SHA256 is
+`8b3e27282ba33dc50fdea11503708c4464dcc76e774181acb83130951abe8724`;
+Debug is `4174d928ccc8b9fb7d441886281fe87a5ea966c2f7ef8c2eb242164704bb8b67`.
+Each emulator with its matching guest configuration passes 27/27 full
+shader-feature checks, 2/2 isolated discard/depth checks and a separate
+600-completed-flip presentation probe with command-buffer copying enabled.
+The full and discard probes use the default command-buffer copying setting.
+These are two matching configuration pairs, not all four emulator/guest
+combinations.
 
-The final fork builds in Debug and Release. Both CPU front-face regression tests
-pass in each configuration. Its Release executable SHA256 is
-`799e1e815a4a5c884c230389ea5d3f17d5eddfd572e7750a0b749da4d27a65a9`;
-Debug is `2cdb0e2cadb7e0cd57d04fdeafa9053cf49d59d9adb866b3437dd30d90de487c`.
+The 320×180 scene matrix passes 14/14 OpenGL comparisons: all six scenes in
+matching Debug and Release configurations, including both PBR HDRIs. Every
+process exits normally. Stress renders 124 frames with two target resizes and
+per-frame resource retirement. Industrial and night PBR mean RGB errors are
+approximately 0.000710 and 0.000588; stress is 0.000304. The same whole-image and
+tile thresholds apply to every run. The 3D scenes retain 4× MSAA and 2048²
+shadows; the triangle intentionally uses one sample.
 
-PBR's native shader requests a signed-float front-face value. The old emulator
-supplies integer bits instead, corrupting normal orientation and final lighting.
-The corrected fork matches the OpenGL industrial PBR capture at 640×360 with
-4× MSAA and 2048² shadows: normalized mean RGB error is 0.000355, and the worst
-16×16-grid tile mean is 0.010729. The normal diagnostic's mean error is 0.000322.
-Visual inspection confirms model texture detail, shadows and rough highlights.
-These comparisons use the default command-buffer copying setting.
+Untimed 1280×720 PBR sessions exit normally through focused Escape in matching
+Debug and Release configurations, recording Options quit and 48/48 and 85/85
+completed flips respectively. Both record zero library allocations in ordinary
+frames. Host-window close also exits normally in both configurations; the runner
+records the interrupted final guest metadata as incomplete. Release window
+captures from both HDRI environments were visually inspected, and Debug window
+captures were retained. Window closure is a quit check, independent of offscreen
+pixel validation.
 
-Visible PBR checks on the final Release emulator also pass. A focused 150 ms
-Escape tap with the Debug guest at 1280×720 records the Options quit, captures
-the last frame, completes 100/100 flips and exits normally. The Release guest's
-night environment renders correctly and exits normally through window close;
-its interrupted final capture is recorded as incomplete. A five-second
-1920×1080 Release session completes 183/183 flips and exits normally. The
-completed 1280×720 and 1920×1080 captures match OpenGL with mean RGB errors
-0.000185 and 0.000128 respectively, using 4× MSAA, 2048² shadows and zero library
-allocations in ordinary frames.
-
-The 320×180 scene matrix passes 14/14 comparisons on the Release emulator,
-covering all six scenes in both guest configurations and both PBR HDRIs. Stress
-runs render 124 frames, including two target resizes and per-frame resource
-retirement. All processes exit normally. Industrial and night PBR mean RGB
-errors are approximately 0.000710 and 0.000588; stress is 0.000304. The same
-whole-image and tile thresholds apply to every run. The 3D scenes retain
-4× MSAA and 2048² shadows; the triangle intentionally uses one sample.
-
-With the scheduler fix, all Debug/Release emulator and Debug/Release guest
-combinations pass 26/26 shader-feature checks and 2/2 separate fresh-device
-discard/depth checks. All eight runs use fresh profiles, default command-buffer
-copying and normal process exit. The earlier intermittent `DEPTH_COPY` zero-depth
-failure is absent in these runs.
+The current runs exercise the resident-buffer fallback on macOS. Physical PS4,
+Linux, Windows, sparse-capable GPUs, DMA-only stress and extended soak coverage
+remain untested. Historical results from the earlier 0.18-based fork do not
+establish those checks for the current upstream base.
 
 Scene comparisons check normalized RGB error over whole images and 4×4 and
 16×16 tile grids. The fine-grid regression test rejects localized shadow defects

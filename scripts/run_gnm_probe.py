@@ -18,7 +18,7 @@ FEATURES = (
     'DEPTH_VERTEX_INSTANCE', 'BLEND', 'CUBE_MIP_HDR', 'HDR_MSAA',
     'HDR_ALPHA_4X', 'HDR_ADDITIVE_4X', 'DEPTH_SAMPLE', 'DEPTH_COPY',
     'DISCARD_KILL', 'DISCARD_KEEP', 'ATTACHMENT_CONTRACT',
-    'MIP_TARGET_BASE', 'MIP_TARGET_SAMPLE',
+    'MIP_TARGET_BASE', 'MIP_TARGET_SAMPLE', 'BUFFER_OVERLAP',
 )
 
 
@@ -39,6 +39,8 @@ def main():
                    help='Check native VideoOut flips and display-buffer color encoding')
     scope.add_argument('--discard-only', action='store_true',
                    help='Isolate native fragment discard and retained depth checks')
+    scope.add_argument('--buffer-overlap-only', action='store_true',
+                   help='Isolate overlapping uniform and vertex buffer bindings')
     p.add_argument('--copy-gpu-buffers', action='store_true',
                    help='Enable emulator command-buffer copying for a controlled diagnostic')
     a = p.parse_args()
@@ -96,9 +98,12 @@ def main():
         command.append('--present')
     elif a.discard_only:
         command.append('--discard-only')
+    elif a.buffer_overlap_only:
+        command.append('--buffer-overlap-only')
     result = {
         'scope': ('GNM shader rendering, descriptors, vertex and instance fetch, '
-                  'culling/front face, depth, blending, HDR, MSAA, copies and GPU readback'),
+                  'overlapping buffer bindings, culling/front face, depth, blending, '
+                  'HDR, MSAA, copies and GPU readback'),
         'emulator': str(emu), 'emulator_sha256': sha(emu),
         'elf_sha256': sha(elf), 'command': command,
         'timeout_seconds': a.timeout, 'emulator_config': config,
@@ -142,7 +147,8 @@ def main():
         if 'GPU_Vulkan_Driver:' in line))
     checks = {}
     expected_features = (('PRESENTATION',) if a.present else
-                         ('DISCARD_KILL', 'DISCARD_KEEP') if a.discard_only else FEATURES)
+                         ('DISCARD_KILL', 'DISCARD_KEEP') if a.discard_only else
+                         ('BUFFER_OVERLAP',) if a.buffer_overlap_only else FEATURES)
     for feature in expected_features:
         matches = re.findall('KGFX_GPU_' + feature + r'_RESULT=(PASS|FAIL)', text)
         checks[feature] = bool(matches) and all(value == 'PASS' for value in matches)
@@ -154,6 +160,8 @@ def main():
             int(submitted) == 600 and int(completed) == 600 for submitted, completed in flips)
     elif a.discard_only:
         result['scope'] = 'Native fragment discard and retained depth checks'
+    elif a.buffer_overlap_only:
+        result['scope'] = 'Overlapping uniform/vertex bindings and migrated buffer contents'
     else:
         for name in ('clear', 'triangle', 'texture', 'msaa'):
             result['gpu_' + name + '_pass'] = checks[name.upper()]

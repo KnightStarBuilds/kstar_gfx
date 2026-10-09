@@ -160,6 +160,103 @@ static bool vertex_abi_checks(kgfx_device *d, kgfx_texture *target) {
   return ok;
 }
 
+static bool buffer_overlap_check(kgfx_device *d) {
+  // Binding the narrow uniform range before the overlapping vertex span forces
+  // cache growth. The second draw reads the migrated range through a fresh bind.
+  constexpr size_t buffer_bytes = 256 * 1024, uniform_offset = 64 * 1024;
+  auto *initial = static_cast<unsigned char *>(calloc(1, buffer_bytes));
+  if (!initial)
+    return false;
+  const float vertices[] = {-.8f, -.8f, 0, 0, 1, 0, 0, 1,
+                            .8f, -.8f, 0, 0, 1, 0, 0, 1,
+                            0,    .8f, 0, 0, 1, 0, 0, 1};
+  const float params[] = {.5f, 1, 1, 1, .5f, 0, 0, 0};
+  memcpy(initial, vertices, sizeof(vertices));
+  memcpy(initial + uniform_offset, params, sizeof(params));
+  kgfx_buffer_desc bd{buffer_bytes, KGFX_BUFFER_VERTEX | KGFX_BUFFER_UNIFORM,
+                      initial};
+  kgfx_buffer *shared{};
+  auto result = kgfx_buffer_create(d, &bd, &shared);
+  free(initial);
+  if (result != KGFX_OK)
+    return false;
+  kgfx_texture_desc td{128, 128, 1, 1, KGFX_TEXTURE_TARGET, KGFX_RGBA8};
+  kgfx_texture *target{};
+  if (kgfx_texture_create(d, &td, &target) != KGFX_OK)
+    return false;
+  auto vs = load("/app0/attributes.vert.sb"),
+       ps = load("/app0/attributes.frag.sb");
+  kgfx_pipeline_desc pd{};
+  pd.vertex = vs;
+  pd.fragment = ps;
+  pd.color_format = KGFX_RGBA8;
+  pd.samples = 1;
+  pd.vertex_stride[0] = 8 * sizeof(float);
+  pd.attribute_count = 2;
+  pd.attributes[0] = {0, 0, 0, 0, KGFX_FLOAT3};
+  pd.attributes[1] = {3, 4 * sizeof(float), 0, 0, KGFX_FLOAT4};
+  kgfx_pipeline *pipeline{};
+  result = kgfx_pipeline_create(d, &pd, &pipeline);
+  free(const_cast<void *>(vs.data));
+  free(const_cast<void *>(ps.data));
+  if (result != KGFX_OK)
+    return false;
+  bool ok = true;
+  for (unsigned draw = 0; draw != 2; ++draw) {
+    kgfx_frame_begin(d);
+    kgfx_pass_desc pass{};
+    pass.color = target;
+    pass.width = pass.height = 128;
+    pass.color_load = KGFX_CLEAR;
+    pass.clear_color[0] = .125f;
+    pass.clear_color[1] = .25f;
+    pass.clear_color[2] = .75f;
+    pass.clear_color[3] = 1;
+    kgfx_pass_begin(d, &pass);
+    kgfx_bind_pipeline(d, pipeline);
+    kgfx_bindings bindings{};
+    bindings.vertex[0] = shared;
+    bindings.uniforms[0] = shared;
+    bindings.uniform_offset[0] = uniform_offset;
+    bindings.uniform_size[0] = 64 * 1024;
+    kgfx_bind_resources(d, &bindings);
+    kgfx_draw(d, 0, 3, 2);
+    kgfx_pass_end(d);
+    kgfx_readback *read{};
+    if (kgfx_readback_begin(d, target, &read) != KGFX_OK)
+      return false;
+    auto done = kgfx_submit(d, 0);
+    if (!done || kgfx_wait(d, done, 10000000000ull) != KGFX_OK)
+      return false;
+    kgfx_readback_data data{};
+    if (kgfx_readback_map(d, read, &data) != KGFX_OK)
+      return false;
+    const auto *pixels = static_cast<const unsigned char *>(data.pixels);
+    const auto *left = pixels + 64 * data.row_pitch + 35 * 4;
+    const auto *right = pixels + 64 * data.row_pitch + 93 * 4;
+    const auto *background = pixels + 4 * data.row_pitch + 4 * 4;
+    const bool valid = abs(int(left[0]) - 128) <= 1 && left[1] < 2 &&
+                       left[2] < 2 && left[3] == 255 &&
+                       abs(int(right[0]) - 128) <= 1 && right[1] < 2 &&
+                       right[2] < 2 && right[3] == 255 &&
+                       abs(int(background[0]) - 32) <= 1 &&
+                       abs(int(background[1]) - 64) <= 1 &&
+                       abs(int(background[2]) - 191) <= 1 &&
+                       background[3] == 255;
+    printf("KGFX_GPU_BUFFER_OVERLAP_RESULT=%s draw=%u left=%u,%u,%u "
+           "right=%u,%u,%u background=%u,%u,%u\n",
+           valid ? "PASS" : "FAIL", draw, left[0], left[1], left[2],
+           right[0], right[1], right[2], background[0], background[1],
+           background[2]);
+    ok &= valid;
+    kgfx_readback_destroy(d, read);
+  }
+  kgfx_pipeline_destroy(d, pipeline);
+  kgfx_texture_destroy(d, target);
+  kgfx_buffer_destroy(d, shared);
+  return ok;
+}
+
 static bool precise_color_checks(kgfx_device *d) {
   auto vs = load("/app0/probe.vert.sb"), ps = load("/app0/precise.frag.sb");
   bool ok = true;
@@ -1026,8 +1123,11 @@ int main(int argc, char **argv) {
   if (argc == 2 && !strcmp(argv[1], "--present"))
     return presentation_check();
   const bool discard_only = argc == 2 && !strcmp(argv[1], "--discard-only");
-  if (argc != 1 && !discard_only) {
-    fprintf(stderr, "Usage: kgfx_gnm_probe [--present | --discard-only]\n");
+  const bool buffer_overlap_only =
+      argc == 2 && !strcmp(argv[1], "--buffer-overlap-only");
+  if (argc != 1 && !discard_only && !buffer_overlap_only) {
+    fprintf(stderr, "Usage: kgfx_gnm_probe [--present | --discard-only | "
+                    "--buffer-overlap-only]\n");
     return 2;
   }
   kgfx_gnm_config backend{0, 1024 * 1024, 8 * 1024 * 1024};
@@ -1044,6 +1144,11 @@ int main(int argc, char **argv) {
     const bool ok = discard_depth_check(d);
     kgfx_device_destroy(d);
     return ok ? 0 : 6;
+  }
+  const bool overlap_ok = buffer_overlap_check(d);
+  if (buffer_overlap_only) {
+    kgfx_device_destroy(d);
+    return overlap_ok ? 0 : 6;
   }
   kgfx_texture_desc td{
       128, 128, 1, 1, KGFX_TEXTURE_TARGET | KGFX_TEXTURE_SAMPLED, KGFX_RGBA8};
@@ -1074,7 +1179,7 @@ int main(int argc, char **argv) {
   if (kgfx_readback_map(d, read, &data) != KGFX_OK)
     return 5;
   auto *p = static_cast<const unsigned char *>(data.pixels);
-  bool ok = true;
+  bool ok = overlap_ok;
   for (size_t i = 0; i < data.size; i += 4)
     if (abs(int(p[i]) - 64) > 1 || abs(int(p[i + 1]) - 128) > 1 ||
         abs(int(p[i + 2]) - 191) > 1 || p[i + 3] != 255)

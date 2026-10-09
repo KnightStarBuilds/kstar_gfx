@@ -60,7 +60,8 @@ shadPS4 0.18.0 installation remains unchanged. Its local executable is
 
 The optional [KnightStarBuilds/shadPS4](https://github.com/KnightStarBuilds/shadPS4)
 test checkout lives at `deps/tools/shadps4`, with separate build output under
-`build/validation/shadps4`. Emulator fixes are source commits in that fork.
+`build/validation/shadps4`. Emulator fixes live directly in that fork. Keep its
+source revision and working-tree changes with the validation evidence.
 The graphics library does not download or build an emulator as a dependency.
 Select a fork build with the same `--emulator` option and keep its results separate
 from the installed release. The fork contains the fixes required for correct
@@ -114,11 +115,14 @@ python3 scripts/run_gnm_probe.py --present \
   --output .local-memory/ps4-present-debug
 ```
 
-Omit `--present` for the full shader-feature probe. Use `--discard-only` to
-isolate fragment discard and retained depth; it is mutually exclusive with
-`--present`. `--copy-gpu-buffers` explicitly enables emulator command-buffer
-copying for a controlled comparison. Each result records that setting, the
-process ID, and executable, shader and driver hashes.
+Omit a scope option for the full shader-feature probe. Use `--discard-only` to
+isolate fragment discard and retained depth, or `--buffer-overlap-only` to test
+uniform and vertex bindings that share one buffer. These options and `--present`
+are mutually exclusive. The overlap check binds a 64 KiB uniform range before a
+256 KiB vertex span, then checks a second draw after rebinding and the background
+clear. `--copy-gpu-buffers` explicitly enables emulator command-buffer copying for
+a controlled comparison. Each result records that setting, the process ID, and
+executable, shader and driver hashes.
 
 Full-probe results are independent of the presentation check. Emulator crashes and unsupported behavior are
 reported as validation failures or limitations. Emulator defects may be fixed
@@ -129,13 +133,13 @@ PS4 compatibility or performance.
 
 ### Building the optional test fork on macOS
 
-The `kstar-gfx-validation-0.18` branch starts from release commit
-`e3ce810f3a653f43ac64ebab63023de281a4103a` to match the installed driver.
-The x86_64 emulator runs through Rosetta on Apple Silicon; the native
+The `kstar-gfx` branch uses upstream commit
+`0c9ca525b8add53e62b3ccd9c9c2f6ef2ebabbfa` (0.19.1) plus the maintained fork
+changes. The x86_64 emulator runs through Rosetta on Apple Silicon; the native
 library/tools remain ARM64. From the kstar_gfx root with the test checkout present:
 
 ```sh
-git -C deps/tools/shadps4 switch kstar-gfx-validation-0.18
+git -C deps/tools/shadps4 switch kstar-gfx
 git -C deps/tools/shadps4 submodule update --init
 git -C deps/tools/shadps4 submodule update --init --recursive externals/zydis
 kgfx_validation_sdk="$(xcrun --sdk macosx --show-sdk-path)"
@@ -153,6 +157,15 @@ env -u LDFLAGS SDKROOT="$kgfx_validation_sdk" cmake \
   --build build/validation/shadps4/cmake --config Release --parallel 4
 ```
 
+The installed KosmicKrisp driver reports `sparseBinding=0` and
+`sparseResidencyBuffer=0`. The fork selects ordinary resident buffers when the
+device or selected queue cannot support sparse buffers. This path uses 64 KiB
+pages, bounds growth padding, merges overlapping ranges with GPU copies, updates
+the buffer-device-address page table and retires old allocations after their
+last submitted use. Binding retries retain pending barriers and fast clears when
+a range grows during draw setup. The sparse path remains available on capable
+devices; it has not been exercised by the macOS validation runs.
+
 The system-Vulkan configuration keeps the existing driver constant while testing
 emulator source changes. The unused nested Mesa checkout is not needed for this
 configuration. Copy `libvulkan.dylib`, `libvulkan_kosmickrisp.dylib`, and
@@ -161,9 +174,9 @@ configuration. Copy `libvulkan.dylib`, `libvulkan_kosmickrisp.dylib`, and
 it does not test the fork's bundled Mesa build. Select
 `build/validation/shadps4/cmake/Release/shadps4` with `--emulator` in the same
 validation commands above. Record the source commit, executable hash and driver
-hashes for each comparison. Fork source commits are separate from kstar_gfx and
-are not pushed by the build or validation workflow. The branch must be pushed
-before a fresh clone from GitHub can obtain its local fixes.
+hashes for each comparison. Commit and push the fork source changes before
+expecting another checkout to reproduce them. Build and validation commands do
+not commit or push either repository.
 
 ## Current API limits
 
