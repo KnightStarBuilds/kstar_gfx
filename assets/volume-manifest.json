@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "license": "CC0-1.0",
+  "files": [
+    {
+      "asset": "small_campfire",
+      "file": "volumes/SmallCampfireVDB.zip",
+      "source": "https://www.mediafire.com/file/9xx9icyomy2txv7/SmallCampfireVDB.zip/file",
+      "sha256": "fce2ad670a4738957f15b742410162e26bb84790e8bddb72ec2a4bd64bcebe30",
+      "bytes": 62400968,
+      "source_frames": 200,
+      "format": "zip",
+      "author": "JangaFX",
+      "license": "CC0-1.0",
+      "license_url": "https://jangafx.com/software/embergen/download/free-vdb-animations"
+    },
+    {
+      "asset": "simple_fire",
+      "file": "volumes/Fire_01.rar",
+      "source": "https://www.mediafire.com/file/j9yvua10nfvhkvu/Fire_01.rar/file",
+      "sha256": "c130c42bf2ffc52254691e2d870c5c54cfda40e73bde4831d1603ccee94fb681",
+      "bytes": 67880563,
+      "source_frames": 101,
+      "format": "rar",
+      "author": "JangaFX",
+      "license": "CC0-1.0",
+      "license_url": "https://jangafx.com/software/embergen/download/free-vdb-animations"
+    },
+    {
+      "asset": "chimney_smoke",
+      "file": "volumes/IndustrialChimneySmokeVDB.zip",
+      "source": "https://www.mediafire.com/file/1luvuum7gf4urxt/IndustrialChimneySmokeVDB.zip/file",
+      "sha256": "eaeddbc288baac5796d50e41ccec347bf2b5f864be39b85b435f4ff7c976b83c",
+      "bytes": 1234636352,
+      "source_frames": 250,
+      "format": "zip",
+      "author": "JangaFX",
+      "license": "CC0-1.0",
+      "license_url": "https://jangafx.com/software/embergen/download/free-vdb-animations"
+    }
+  ]
+}

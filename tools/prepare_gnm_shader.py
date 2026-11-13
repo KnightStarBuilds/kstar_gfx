@@ -2,7 +2,8 @@
 # SPDX-License-Identifier: MIT
 """Specialize common coordinates to native GNM clip depth and render-target UVs."""
 import pathlib,sys
-source,destination=map(pathlib.Path,sys.argv[1:]);text=source.read_text()
+from shader_source import expand
+source,destination=map(pathlib.Path,sys.argv[1:]);text=expand(source)
 first,newline,rest=text.partition('\n')
 if not first.startswith('#version'):raise ValueError('Shader must begin with #version')
 text=first+'\n#define KGFX_GNM 1\n'+rest

@@ -122,6 +122,10 @@ enum : unsigned {
   GL_WAIT_FAILED = 0x911D,
   GL_SYNC_FLUSH_COMMANDS_BIT = 1,
   GL_MAP_READ_BIT = 1,
+  GL_TIMESTAMP = 0x8E28,
+  GL_QUERY_COUNTER_BITS = 0x8864,
+  GL_QUERY_RESULT = 0x8866,
+  GL_QUERY_RESULT_AVAILABLE = 0x8867,
   GL_TEXTURE_CUBE_MAP_SEAMLESS = 0x884F
 };
 // clang-format off
@@ -204,6 +208,14 @@ enum : unsigned {
   X(GLenum, ClientWaitSync, (GLsync, GLbitfield, GLuint64)) \
   X(void, Flush, (void)) \
   X(void, Finish, (void))
+// Timer functions are optional even when a loader exposes the core GL version.
+#define KGFX_GL_TIMING_FUNCTIONS(X) \
+  X(void, GenQueries, (GLsizei, GLuint *)) \
+  X(void, DeleteQueries, (GLsizei, const GLuint *)) \
+  X(void, GetQueryiv, (GLenum, GLenum, GLint *)) \
+  X(void, QueryCounter, (GLuint, GLenum)) \
+  X(void, GetQueryObjectiv, (GLuint, GLenum, GLint *)) \
+  X(void, GetQueryObjectui64v, (GLuint, GLenum, GLuint64 *))
 // clang-format on
 
 struct GlApi {
@@ -211,6 +223,7 @@ struct GlApi {
   using name##Fn = result(KGFX_GL_CALL *) args;                                \
   name##Fn name{};
   KGFX_GL_FUNCTIONS(KGFX_GL_MEMBER)
+  KGFX_GL_TIMING_FUNCTIONS(KGFX_GL_MEMBER)
 #undef KGFX_GL_MEMBER
   bool load(kgfx_gl_get_proc_fn get, const char **missing) {
 #define KGFX_GL_LOAD(result, name, args)                                       \
@@ -221,6 +234,14 @@ struct GlApi {
   }
     KGFX_GL_FUNCTIONS(KGFX_GL_LOAD)
 #undef KGFX_GL_LOAD
+#define KGFX_GL_LOAD_TIMING(result, name, args) \
+    name = reinterpret_cast<name##Fn>(get("gl" #name));
+    KGFX_GL_TIMING_FUNCTIONS(KGFX_GL_LOAD_TIMING)
+#undef KGFX_GL_LOAD_TIMING
     return true;
+  }
+  bool has_timing() const {
+    return GenQueries && DeleteQueries && GetQueryiv && QueryCounter &&
+           GetQueryObjectiv && GetQueryObjectui64v;
   }
 };

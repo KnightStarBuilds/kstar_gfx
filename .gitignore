@@ -5,6 +5,8 @@
 /deps/cache/
 /assets/*
 !/assets/manifest.json
+!/assets/scenes.json
+!/assets/volume-manifest.json
 *.DS_Store
 imgui.ini
 

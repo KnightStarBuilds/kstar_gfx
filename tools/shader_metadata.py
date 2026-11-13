@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 """Generate binding constants and opt-in assertions against consumer C structs."""
 import hashlib,json,pathlib,re,sys
+from shader_source import expand
 
 def ident(value):return re.sub('[^a-zA-Z0-9]','_',value).upper()
 def emit(reflection,spirv,destination,source=None):
@@ -36,6 +37,10 @@ def emit(reflection,spirv,destination,source=None):
              'layout_sha256':hashlib.sha256(json.dumps(data,sort_keys=True,separators=(',',':')).encode()).hexdigest(),
              'artifacts':artifacts,'targets':['GLSL 410 core','SPIR-V 1.0','base PS4 GFX7'],
              'compiler_sources':[x for x in lock['dependencies'] if x['name'] in ['glslang','spirv-cross','spirv-tools','spirv-headers','opengnm-psbc']]}
-    if source:package['source_sha256']=hashlib.sha256(pathlib.Path(source).read_bytes()).hexdigest()
+    if source:
+        dependencies=set();expanded=expand(pathlib.Path(source),dependencies=dependencies)
+        package['source_sha256']=hashlib.sha256(pathlib.Path(source).read_bytes()).hexdigest()
+        package['expanded_source_sha256']=hashlib.sha256(expanded.encode()).hexdigest()
+        package['source_dependencies']={p.relative_to(pathlib.Path(source).resolve().parent).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(dependencies)}
     pathlib.Path(str(spirv).removesuffix('.spv')+'.package.json').write_text(json.dumps(package,indent=2)+'\n')
 if __name__=='__main__':emit(*sys.argv[1:])

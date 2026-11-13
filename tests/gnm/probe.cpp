@@ -1,6 +1,7 @@
 #include <initializer_list>
 #include <kstar_gfx/gfx.h>
 #include <kstar_gfx/gnm.h>
+#include "../hdr_resolve_load.hpp"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,6 +24,29 @@ static kgfx_shader_artifact load(const char *name) {
 }
 // The generated triangle is counter-clockwise in clip-space. This checks the
 // public front-face convention independently of depth or model geometry.
+static bool indirect_array_check(kgfx_device *d, kgfx_texture *target) {
+  auto vs=load("/app0/probe.vert.sb"),ps=load("/app0/indirect_array.frag.sb");
+  kgfx_pipeline_desc pd{};pd.vertex=vs;pd.fragment=ps;pd.color_format=KGFX_RGBA8;pd.samples=1;
+  kgfx_pipeline* pipeline{};if(kgfx_pipeline_create(d,&pd,&pipeline)!=KGFX_OK)return false;
+  struct Inputs {float values[4][4];int control[4];} input{{{.1f,.05f,.15f,0},{.2f,.1f,.25f,0},{.15f,.1f,.2f,0},{.05f,.05f,.1f,0}},{1,4,0,0}};
+  kgfx_buffer* uniform{};kgfx_buffer_desc bd{sizeof(input),KGFX_BUFFER_UNIFORM,&input};
+  if(kgfx_buffer_create(d,&bd,&uniform)!=KGFX_OK)return false;
+  bool ok=true;
+  for(int count=1;count<=4;++count){
+    input.control[1]=count;kgfx_buffer_update(d,uniform,0,&input,sizeof(input));
+    kgfx_pass_desc pass{};pass.color=target;pass.width=pass.height=128;pass.color_load=KGFX_CLEAR;
+    kgfx_frame_begin(d);kgfx_pass_begin(d,&pass);kgfx_bind_pipeline(d,pipeline);kgfx_bindings bindings{};bindings.uniforms[0]=uniform;bindings.uniform_size[0]=sizeof(input);kgfx_bind_resources(d,&bindings);kgfx_draw(d,0,3,1);kgfx_pass_end(d);
+    kgfx_readback* read{};kgfx_readback_begin(d,target,&read);auto done=kgfx_submit(d,0);
+    if(!done||kgfx_wait(d,done,10000000000ull)!=KGFX_OK)return false;
+    kgfx_readback_data data{};if(kgfx_readback_map(d,read,&data)!=KGFX_OK)return false;
+    const auto* pixel=static_cast<const unsigned char*>(data.pixels)+64*data.row_pitch+64*4;
+    for(int channel=0;channel<3;++channel){float expected=0;for(int i=0;i<count;++i)expected+=input.values[i][channel];ok&=abs(int(pixel[channel])-int(expected*255+.5f))<=2;}
+    kgfx_readback_destroy(d,read);
+  }
+  printf("KGFX_GPU_INDIRECT_ARRAY_RESULT=%s\n",ok?"PASS":"FAIL");
+  kgfx_buffer_destroy(d,uniform);kgfx_pipeline_destroy(d,pipeline);free(const_cast<void*>(vs.data));free(const_cast<void*>(ps.data));return ok;
+}
+
 static bool culling_check(kgfx_device *d, kgfx_texture *target) {
   auto vs = load("/app0/probe.vert.sb"), ps = load("/app0/probe.frag.sb");
   bool ok = true;
@@ -508,6 +532,15 @@ static bool hdr_blend_checks(kgfx_device *d) {
   return ok;
 }
 
+static bool hdr_resolve_load_check(kgfx_device *d) {
+  auto vs = load("/app0/attributes.vert.sb"),
+       ps = load("/app0/attributes.frag.sb");
+  const bool ok = hdr_resolve_load_check(d, vs, ps);
+  free(const_cast<void *>(vs.data));
+  free(const_cast<void *>(ps.data));
+  return ok;
+}
+
 static bool discard_depth_check(kgfx_device *d) {
   auto vs = load("/app0/attributes.vert.sb"),
        ps = load("/app0/discard.frag.sb");
@@ -801,23 +834,167 @@ static bool hdr_msaa_check(kgfx_device *d) {
   auto *center = reinterpret_cast<const uint16_t *>(
       static_cast<const unsigned char *>(data.pixels) + 90 * data.row_pitch +
       160 * 8);
-  unsigned partial = 0;
+  unsigned partial = 0, coverage[3]{}, invalid = 0;
   for (unsigned y = 0; y < 180; ++y)
     for (unsigned x = 0; x < 320; ++x) {
       auto *p = reinterpret_cast<const uint16_t *>(
           static_cast<const unsigned char *>(data.pixels) + y * data.row_pitch +
           x * 8);
-      if (p[0] > 0 && p[0] < 0x3c00)
+      if (p[0] > 0 && p[0] < 0x3c00) {
         ++partial;
+        // Four uncompressed HDR samples must resolve to exact 1/4, 1/2 or
+        // 3/4 coverage. This also detects averaging fewer than four samples.
+        if (p[0] == 0x3400)
+          ++coverage[0];
+        else if (p[0] == 0x3800)
+          ++coverage[1];
+        else if (p[0] == 0x3a00)
+          ++coverage[2];
+        else
+          ++invalid;
+      }
     }
   bool ok =
-      center[0] == 0x3c00 && center[1] == 0 && center[2] == 0 && partial > 20;
-  printf("KGFX_GPU_HDR_MSAA_RESULT=%s centerhalf=%x,%x,%x partial=%u\n",
-         ok ? "PASS" : "FAIL", center[0], center[1], center[2], partial);
+      center[0] == 0x3c00 && center[1] == 0 && center[2] == 0 && partial > 20 &&
+      coverage[0] && coverage[1] && coverage[2] && !invalid;
+  printf("KGFX_GPU_HDR_MSAA_RESULT=%s centerhalf=%x,%x,%x partial=%u "
+         "coverage=%u,%u,%u invalid=%u\n",
+         ok ? "PASS" : "FAIL", center[0], center[1], center[2], partial,
+         coverage[0], coverage[1], coverage[2], invalid);
   kgfx_readback_destroy(d, read);
   kgfx_pipeline_destroy(d, pipeline);
   kgfx_texture_destroy(d, msaa);
   kgfx_texture_destroy(d, resolved);
+  return ok;
+}
+
+// The ground crosses the near plane at diagonal camera angles. Its large
+// projected triangles must not overflow fixed-point raster setup or occlude a
+// foreground primitive, regardless of draw order or attachment sample count.
+static bool clipped_ground_depth_check(kgfx_device *d) {
+  struct Vertex { float position[4], color[4]; };
+  // At 320x180 the near-clipped floor only reaches about 16,644 screen
+  // pixels, below the hardware limit. This viewport reaches about 66,576,
+  // exercising the same overflow as the demo without a 1080p readback.
+  constexpr unsigned width = 1280, height = 720;
+  auto vs = load("/app0/clip_depth.vert.sb");
+  auto ps = load("/app0/attributes.frag.sb");
+  bool ok = true;
+  unsigned cases = 0;
+  for (unsigned samples : {1u, 4u}) {
+    kgfx_pipeline_desc pd{};
+    pd.vertex = vs;
+    pd.fragment = ps;
+    pd.color_format = KGFX_RGBA8;
+    pd.depth_format = KGFX_DEPTH32F;
+    pd.samples = samples;
+    pd.depth_test = pd.depth_write = 1;
+    pd.depth_compare = KGFX_COMPARE_LESS;
+    pd.vertex_stride[0] = sizeof(Vertex);
+    pd.attribute_count = 2;
+    pd.attributes[0] = {0, 0, 0, 0, KGFX_FLOAT4};
+    pd.attributes[1] = {3, 16, 0, 0, KGFX_FLOAT4};
+    kgfx_pipeline *pipeline{};
+    if (kgfx_pipeline_create(d, &pd, &pipeline) != KGFX_OK)
+      return false;
+    kgfx_texture_desc td{width, height, 1, samples, KGFX_TEXTURE_TARGET,
+                         KGFX_RGBA8};
+    kgfx_texture *color{}, *depth{}, *resolved{};
+    if (kgfx_texture_create(d, &td, &color) != KGFX_OK)
+      return false;
+    td.format = KGFX_DEPTH32F;
+    if (kgfx_texture_create(d, &td, &depth) != KGFX_OK)
+      return false;
+    td.format = KGFX_RGBA8;
+    td.samples = 1;
+    if (kgfx_texture_create(d, &td, &resolved) != KGFX_OK)
+      return false;
+    kgfx_buffer_desc bd{12 * sizeof(Vertex),
+                        KGFX_BUFFER_VERTEX | KGFX_BUFFER_DYNAMIC, nullptr};
+    kgfx_buffer *vertex{};
+    if (kgfx_buffer_create(d, &bd, &vertex) != KGFX_OK)
+      return false;
+    for (unsigned angle = 0; angle < 8; ++angle) {
+      const float yaw = float(angle) * .7853981633974483f;
+      const float sy = sinf(yaw), cy = cosf(yaw);
+      const float se = sinf(.22f), ce = cosf(.22f);
+      const float f = 1 / tanf(24 * .0174532925199433f);
+      const float corners[4][2] = {{-9,-9},{9,-9},{-9,9},{9,9}};
+      const unsigned index[6] = {0,2,1,1,2,3};
+      const float front[4][2] = {{-.22f,-.8f},{.22f,-.8f},
+                                {-.22f,-.25f},{.22f,-.25f}};
+      Vertex vertices[12]{};
+      for (unsigned n = 0; n < 6; ++n) {
+        const float x = corners[index[n]][0], z = corners[index[n]][1];
+        const float w = 10.8f - (sy*ce*x - se*1.65f + cy*ce*z);
+        vertices[n] = {{(cy*x-sy*z)*f/(16.0f/9.0f),
+                         (-sy*se*x-ce*1.65f-cy*se*z)*f,
+                         (100.05f*w-10.0f)/99.95f, w},
+                        {.25f,.25f,.25f,1}};
+        vertices[n+6] = {{front[index[n]][0],front[index[n]][1],-.5f,1},
+                          {1,0,0,1}};
+      }
+      for (unsigned order = 0; order < 2; ++order) {
+        if (kgfx_frame_begin(d) != KGFX_OK ||
+            kgfx_buffer_update(d, vertex, 0, vertices, sizeof(vertices)) != KGFX_OK)
+          return false;
+        kgfx_pass_desc pass{};
+        pass.color = color;
+        pass.depth = depth;
+        pass.width = width;
+        pass.height = height;
+        pass.color_load = pass.depth_load = KGFX_CLEAR;
+        pass.clear_depth = 1;
+        pass.clear_color[2] = pass.clear_color[3] = 1;
+        if (kgfx_pass_begin(d, &pass) != KGFX_OK)
+          return false;
+        kgfx_bindings bindings{};
+        bindings.vertex[0] = vertex;
+        // A second pipeline bind must preserve the viewport's guardbands.
+        kgfx_bind_pipeline(d, pipeline);
+        kgfx_bind_resources(d, &bindings);
+        kgfx_draw(d, order ? 6 : 0, 6, 1);
+        kgfx_bind_pipeline(d, pipeline);
+        kgfx_bind_resources(d, &bindings);
+        kgfx_draw(d, order ? 0 : 6, 6, 1);
+        kgfx_pass_end(d);
+        if (samples > 1 && kgfx_texture_resolve(d, color, resolved) != KGFX_OK)
+          return false;
+        kgfx_readback *read{};
+        if (kgfx_readback_begin(d, samples > 1 ? resolved : color, &read) != KGFX_OK)
+          return false;
+        const auto done = kgfx_submit(d, 0);
+        if (!done || kgfx_wait(d, done, 10000000000ull) != KGFX_OK)
+          return false;
+        kgfx_readback_data data{};
+        if (kgfx_readback_map(d, read, &data) != KGFX_OK)
+          return false;
+        const auto *row = static_cast<const unsigned char *>(data.pixels) +
+                          (height * 7 / 9) * data.row_pitch;
+        const auto *foreground = row + (width / 2) * 4;
+        const auto *ground = row + (width * 23 / 64) * 4;
+        const bool valid = foreground[0] > 250 && foreground[1] < 3 &&
+                           foreground[2] < 3 && ground[0] >= 63 &&
+                           ground[0] <= 65 && ground[1] >= 63 &&
+                           ground[1] <= 65 && ground[2] >= 63 && ground[2] <= 65;
+        if (!valid)
+          printf("KGFX clipped ground failed samples=%u angle=%u order=%u foreground=%u,%u,%u ground=%u,%u,%u\n",
+                 samples, angle, order, foreground[0], foreground[1], foreground[2],
+                 ground[0], ground[1], ground[2]);
+        ok &= valid;
+        ++cases;
+        kgfx_readback_destroy(d, read);
+      }
+    }
+    kgfx_pipeline_destroy(d, pipeline);
+    kgfx_buffer_destroy(d, vertex);
+    kgfx_texture_destroy(d, color);
+    kgfx_texture_destroy(d, depth);
+    kgfx_texture_destroy(d, resolved);
+  }
+  free(const_cast<void *>(vs.data));
+  free(const_cast<void *>(ps.data));
+  printf("KGFX_GPU_CLIPPED_GROUND_DEPTH_RESULT=%s cases=%u\n", ok ? "PASS" : "FAIL", cases);
   return ok;
 }
 
@@ -1372,14 +1549,17 @@ int main(int argc, char **argv) {
     kgfx_texture_destroy(d, msaa);
   }
   ok &= culling_check(d, t);
+  ok &= indirect_array_check(d, t);
   ok &= vertex_abi_checks(d, t);
   ok &= precise_color_checks(d);
   ok &= transfer_checks(d);
   ok &= attachment_storage_checks(d, t);
   ok &= hdr_msaa_check(d);
   ok &= hdr_blend_checks(d);
+  ok &= hdr_resolve_load_check(d);
   ok &= feature_checks(d, t);
   ok &= discard_depth_check(d);
+  ok &= clipped_ground_depth_check(d);
   kgfx_texture_destroy(d, t);
   kgfx_device_destroy(d);
   return ok ? 0 : 6;

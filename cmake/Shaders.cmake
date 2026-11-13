@@ -60,6 +60,7 @@ function(kgfx_compile_shaders target source_dir output_dir output_variable)
     cmake_parse_arguments(ARG "" "" "SOURCES" ${ARGN})
     kgfx_add_shader_tools()
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    file(GLOB_RECURSE shared_includes CONFIGURE_DEPENDS "${source_dir}/*.glsl")
     set(outputs)
     foreach(shader IN LISTS ARG_SOURCES)
         set(source "${source_dir}/${shader}")
@@ -68,7 +69,8 @@ function(kgfx_compile_shaders target source_dir output_dir output_variable)
         string(SUBSTRING "${stage}" 1 -1 stage)
         add_custom_command(OUTPUT "${output}.glsl" "${output}.spv" "${output}.json" "${output}.h" "${output}.gnm.spv" "${output}.package.json"
             COMMAND "${CMAKE_COMMAND}" -E make_directory "${output_dir}"
-            COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.0 "${source}" -o "${output}.spv"
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/shader_source.py" "${source}" "${output}.expanded.glsl"
+            COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.0 -S "${stage}" "${output}.expanded.glsl" -o "${output}.spv"
             COMMAND $<TARGET_FILE:spirv-val> --target-env vulkan1.0 "${output}.spv"
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/prepare_gnm_shader.py" "${source}" "${output}.gnm.glsl"
             COMMAND $<TARGET_FILE:glslang-standalone> -V --target-env vulkan1.0 -S "${stage}" "${output}.gnm.glsl" -o "${output}.gnm.spv"
@@ -77,9 +79,10 @@ function(kgfx_compile_shaders target source_dir output_dir output_variable)
             COMMAND $<TARGET_FILE:spirv-cross> "${output}.spv" --reflect --output "${output}.json"
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/shader_metadata.py"
                 "${output}.json" "${output}.spv" "${output}.h" "${source}"
-            DEPENDS "${source}" glslang-standalone spirv-val spirv-cross
+            DEPENDS "${source}" ${shared_includes} glslang-standalone spirv-val spirv-cross
                 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/shader_metadata.py"
                 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/prepare_gnm_shader.py"
+                "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/shader_source.py"
                 "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../deps/toolchain-lock.json"
             VERBATIM COMMENT "Compiling and validating ${shader}")
         list(APPEND outputs "${output}.glsl" "${output}.spv" "${output}.json" "${output}.h" "${output}.gnm.spv" "${output}.package.json")
@@ -107,7 +110,7 @@ function(kgfx_compile_shaders target source_dir output_dir output_variable)
     add_custom_target(${target} DEPENDS ${outputs})
     if(BUILD_TESTING AND NOT CMAKE_CROSSCOMPILING)
         add_test(NAME ${target}_abi COMMAND "${Python3_EXECUTABLE}"
-            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/test_shaders.py" "${output_dir}" --cc "${CMAKE_C_COMPILER}")
+            "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/test_shaders.py" "${output_dir}" --cc "${CMAKE_C_COMPILER}" --cxx "${CMAKE_CXX_COMPILER}" --sysroot "${CMAKE_OSX_SYSROOT}")
     endif()
     set(${output_variable} "${outputs}" PARENT_SCOPE)
 endfunction()

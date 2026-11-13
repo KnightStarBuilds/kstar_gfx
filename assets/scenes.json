@@ -1,0 +1,372 @@
+{
+  "schema": 1,
+  "default": "facility",
+  "scenes": [
+    {
+      "id": "triangle",
+      "title": "Triangle",
+      "walkthrough": false,
+      "views": [
+        "overview"
+      ],
+      "sequences": [
+        "idle"
+      ],
+      "resources": []
+    },
+    {
+      "id": "cubes",
+      "title": "Cubes",
+      "walkthrough": false,
+      "views": [
+        "overview"
+      ],
+      "sequences": [
+        "idle"
+      ],
+      "resources": []
+    },
+    {
+      "id": "instances",
+      "title": "Instances",
+      "walkthrough": false,
+      "views": [
+        "overview"
+      ],
+      "sequences": [
+        "idle"
+      ],
+      "resources": []
+    },
+    {
+      "id": "offscreen",
+      "title": "Offscreen",
+      "walkthrough": false,
+      "views": [
+        "overview"
+      ],
+      "sequences": [
+        "idle"
+      ],
+      "resources": []
+    },
+    {
+      "id": "stress",
+      "title": "Stress",
+      "walkthrough": false,
+      "views": [
+        "overview"
+      ],
+      "sequences": [
+        "idle"
+      ],
+      "resources": []
+    },
+    {
+      "id": "pbr",
+      "title": "PBR Materials",
+      "walkthrough": false,
+      "views": [
+        "overview",
+        "rifle",
+        "hat"
+      ],
+      "sequences": [
+        "idle"
+      ],
+      "resources": [
+        "bolt_action_rifle_7_62.kgmodel",
+        "fishermans_hat.kgmodel"
+      ]
+    },
+    {
+      "id": "facility",
+      "title": "Rainfall Facility",
+      "walkthrough": true,
+      "views": [
+        "overview",
+        "glass",
+        "water",
+        "fire"
+      ],
+      "sequences": [
+        "idle",
+        "interact",
+        "tour"
+      ],
+      "resources": [
+        "modular_industrial_pipes_01.kgmodel",
+        "power_box_01.kgmodel",
+        "Barrel_01.kgmodel",
+        "effects/fire.kgtex",
+        "effects/smoke.kgtex",
+        "effects/water_spray.kgtex",
+        "effects/sparks.kgtex",
+        "effects/water_normal.kgtex",
+        "effects/foam.kgtex",
+        "effects/grime.kgtex",
+        "modular_industrial_pipes_01_pipe01.kgmodel",
+        "textures/concrete_floor_painted_diff_2k.kgtex",
+        "textures/concrete_floor_painted_nor_gl_2k.kgtex",
+        "textures/concrete_floor_painted_arm_2k.kgtex",
+        "textures/rusty_metal_02_diff_2k.kgtex",
+        "textures/rusty_metal_02_nor_gl_2k.kgtex",
+        "textures/rusty_metal_02_arm_2k.kgtex",
+        "effects/surface_masks.kgtex",
+        "effects/volumes/small_campfire/volume.kgtex",
+        "effects/volumes/small_campfire/distant.kgtex",
+        "effects/volumes/small_campfire/volume.json",
+        "effects/volumes/simple_fire/volume.kgtex",
+        "effects/volumes/simple_fire/distant.kgtex",
+        "effects/volumes/simple_fire/volume.json",
+        "effects/volumes/chimney_smoke/volume.kgtex",
+        "effects/volumes/chimney_smoke/distant.kgtex",
+        "effects/volumes/chimney_smoke/volume.json"
+      ]
+    },
+    {
+      "id": "glass_lab",
+      "title": "Glass Observation Lab",
+      "walkthrough": true,
+      "views": [
+        "overview",
+        "glass",
+        "water",
+        "fire"
+      ],
+      "sequences": [
+        "idle",
+        "interact",
+        "tour"
+      ],
+      "resources": [
+        "modular_industrial_pipes_01.kgmodel",
+        "power_box_01.kgmodel",
+        "Barrel_01.kgmodel",
+        "effects/fire.kgtex",
+        "effects/smoke.kgtex",
+        "effects/water_spray.kgtex",
+        "effects/sparks.kgtex",
+        "effects/water_normal.kgtex",
+        "effects/foam.kgtex",
+        "effects/grime.kgtex",
+        "modular_industrial_pipes_01_pipe01.kgmodel",
+        "textures/concrete_floor_painted_diff_2k.kgtex",
+        "textures/concrete_floor_painted_nor_gl_2k.kgtex",
+        "textures/concrete_floor_painted_arm_2k.kgtex",
+        "textures/rusty_metal_02_diff_2k.kgtex",
+        "textures/rusty_metal_02_nor_gl_2k.kgtex",
+        "textures/rusty_metal_02_arm_2k.kgtex",
+        "effects/surface_masks.kgtex",
+        "effects/volumes/small_campfire/volume.kgtex",
+        "effects/volumes/small_campfire/distant.kgtex",
+        "effects/volumes/small_campfire/volume.json",
+        "effects/volumes/simple_fire/volume.kgtex",
+        "effects/volumes/simple_fire/distant.kgtex",
+        "effects/volumes/simple_fire/volume.json",
+        "effects/volumes/chimney_smoke/volume.kgtex",
+        "effects/volumes/chimney_smoke/distant.kgtex",
+        "effects/volumes/chimney_smoke/volume.json"
+      ]
+    },
+    {
+      "id": "waterworks",
+      "title": "Waterworks",
+      "walkthrough": true,
+      "views": [
+        "overview",
+        "glass",
+        "water",
+        "fire"
+      ],
+      "sequences": [
+        "idle",
+        "interact",
+        "tour"
+      ],
+      "resources": [
+        "modular_industrial_pipes_01.kgmodel",
+        "power_box_01.kgmodel",
+        "Barrel_01.kgmodel",
+        "effects/fire.kgtex",
+        "effects/smoke.kgtex",
+        "effects/water_spray.kgtex",
+        "effects/sparks.kgtex",
+        "effects/water_normal.kgtex",
+        "effects/foam.kgtex",
+        "effects/grime.kgtex",
+        "modular_industrial_pipes_01_pipe01.kgmodel",
+        "textures/concrete_floor_painted_diff_2k.kgtex",
+        "textures/concrete_floor_painted_nor_gl_2k.kgtex",
+        "textures/concrete_floor_painted_arm_2k.kgtex",
+        "textures/rusty_metal_02_diff_2k.kgtex",
+        "textures/rusty_metal_02_nor_gl_2k.kgtex",
+        "textures/rusty_metal_02_arm_2k.kgtex",
+        "effects/surface_masks.kgtex",
+        "effects/volumes/small_campfire/volume.kgtex",
+        "effects/volumes/small_campfire/distant.kgtex",
+        "effects/volumes/small_campfire/volume.json",
+        "effects/volumes/simple_fire/volume.kgtex",
+        "effects/volumes/simple_fire/distant.kgtex",
+        "effects/volumes/simple_fire/volume.json",
+        "effects/volumes/chimney_smoke/volume.kgtex",
+        "effects/volumes/chimney_smoke/distant.kgtex",
+        "effects/volumes/chimney_smoke/volume.json"
+      ]
+    },
+    {
+      "id": "boiler_room",
+      "title": "Boiler Room",
+      "walkthrough": true,
+      "views": [
+        "overview",
+        "glass",
+        "water",
+        "fire"
+      ],
+      "sequences": [
+        "idle",
+        "interact",
+        "tour"
+      ],
+      "resources": [
+        "modular_industrial_pipes_01.kgmodel",
+        "power_box_01.kgmodel",
+        "Barrel_01.kgmodel",
+        "effects/fire.kgtex",
+        "effects/smoke.kgtex",
+        "effects/water_spray.kgtex",
+        "effects/sparks.kgtex",
+        "effects/water_normal.kgtex",
+        "effects/foam.kgtex",
+        "effects/grime.kgtex",
+        "modular_industrial_pipes_01_pipe01.kgmodel",
+        "textures/concrete_floor_painted_diff_2k.kgtex",
+        "textures/concrete_floor_painted_nor_gl_2k.kgtex",
+        "textures/concrete_floor_painted_arm_2k.kgtex",
+        "textures/rusty_metal_02_diff_2k.kgtex",
+        "textures/rusty_metal_02_nor_gl_2k.kgtex",
+        "textures/rusty_metal_02_arm_2k.kgtex",
+        "effects/surface_masks.kgtex",
+        "effects/volumes/small_campfire/volume.kgtex",
+        "effects/volumes/small_campfire/distant.kgtex",
+        "effects/volumes/small_campfire/volume.json",
+        "effects/volumes/simple_fire/volume.kgtex",
+        "effects/volumes/simple_fire/distant.kgtex",
+        "effects/volumes/simple_fire/volume.json",
+        "effects/volumes/chimney_smoke/volume.kgtex",
+        "effects/volumes/chimney_smoke/distant.kgtex",
+        "effects/volumes/chimney_smoke/volume.json"
+      ]
+    },
+    {
+      "id": "lighting_baked",
+      "title": "Lighting / Static Bake",
+      "walkthrough": true,
+      "views": [
+        "overview",
+        "glass",
+        "water",
+        "fire"
+      ],
+      "sequences": [
+        "idle",
+        "interact",
+        "tour"
+      ],
+      "resources": [
+        "modular_industrial_pipes_01.kgmodel",
+        "power_box_01.kgmodel",
+        "Barrel_01.kgmodel",
+        "effects/fire.kgtex",
+        "effects/smoke.kgtex",
+        "effects/water_spray.kgtex",
+        "effects/sparks.kgtex",
+        "effects/water_normal.kgtex",
+        "effects/foam.kgtex",
+        "effects/grime.kgtex",
+        "modular_industrial_pipes_01_pipe01.kgmodel",
+        "textures/concrete_floor_painted_diff_2k.kgtex",
+        "textures/concrete_floor_painted_nor_gl_2k.kgtex",
+        "textures/concrete_floor_painted_arm_2k.kgtex",
+        "textures/rusty_metal_02_diff_2k.kgtex",
+        "textures/rusty_metal_02_nor_gl_2k.kgtex",
+        "textures/rusty_metal_02_arm_2k.kgtex",
+        "effects/surface_masks.kgtex",
+        "effects/volumes/small_campfire/volume.kgtex",
+        "effects/volumes/small_campfire/distant.kgtex",
+        "effects/volumes/small_campfire/volume.json",
+        "effects/volumes/simple_fire/volume.kgtex",
+        "effects/volumes/simple_fire/distant.kgtex",
+        "effects/volumes/simple_fire/volume.json",
+        "effects/volumes/chimney_smoke/volume.kgtex",
+        "effects/volumes/chimney_smoke/distant.kgtex",
+        "effects/volumes/chimney_smoke/volume.json",
+        "lighting/industrial.kglight",
+        "lighting/industrial.kglmap",
+        "lighting/industrial_lightmap.kgtex"
+      ],
+      "lighting": {
+        "matched_scene": "lighting_dynamic",
+        "static_bake": true,
+        "probe_count": 160,
+        "probe_updates": 16,
+        "rays_per_probe": 96,
+        "diffuse_bounces": 3
+      }
+    },
+    {
+      "id": "lighting_dynamic",
+      "title": "Lighting / Dynamic Transport",
+      "walkthrough": true,
+      "views": [
+        "overview",
+        "glass",
+        "water",
+        "fire"
+      ],
+      "sequences": [
+        "idle",
+        "interact",
+        "tour"
+      ],
+      "resources": [
+        "modular_industrial_pipes_01.kgmodel",
+        "power_box_01.kgmodel",
+        "Barrel_01.kgmodel",
+        "effects/fire.kgtex",
+        "effects/smoke.kgtex",
+        "effects/water_spray.kgtex",
+        "effects/sparks.kgtex",
+        "effects/water_normal.kgtex",
+        "effects/foam.kgtex",
+        "effects/grime.kgtex",
+        "modular_industrial_pipes_01_pipe01.kgmodel",
+        "textures/concrete_floor_painted_diff_2k.kgtex",
+        "textures/concrete_floor_painted_nor_gl_2k.kgtex",
+        "textures/concrete_floor_painted_arm_2k.kgtex",
+        "textures/rusty_metal_02_diff_2k.kgtex",
+        "textures/rusty_metal_02_nor_gl_2k.kgtex",
+        "textures/rusty_metal_02_arm_2k.kgtex",
+        "effects/surface_masks.kgtex",
+        "effects/volumes/small_campfire/volume.kgtex",
+        "effects/volumes/small_campfire/distant.kgtex",
+        "effects/volumes/small_campfire/volume.json",
+        "effects/volumes/simple_fire/volume.kgtex",
+        "effects/volumes/simple_fire/distant.kgtex",
+        "effects/volumes/simple_fire/volume.json",
+        "effects/volumes/chimney_smoke/volume.kgtex",
+        "effects/volumes/chimney_smoke/distant.kgtex",
+        "effects/volumes/chimney_smoke/volume.json"
+      ],
+      "lighting": {
+        "matched_scene": "lighting_baked",
+        "static_bake": false,
+        "probe_count": 160,
+        "probe_updates": 16,
+        "rays_per_probe": 96,
+        "diffuse_bounces": 3
+      }
+    }
+  ]
+}

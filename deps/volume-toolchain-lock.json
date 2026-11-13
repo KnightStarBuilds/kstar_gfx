@@ -1,0 +1,72 @@
+{
+  "schema": 1,
+  "dependencies": [
+    {
+      "name": "openvdb",
+      "revision": "v12.1.1",
+      "repository": "https://github.com/AcademySoftwareFoundation/openvdb",
+      "url": "https://codeload.github.com/AcademySoftwareFoundation/openvdb/tar.gz/v12.1.1",
+      "sha256": "ccd0ea1669a53c7c13087a08ac5a1351041c4cdd308f6d6f591074a106fcb565",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "record": "deps/volume-licenses/openvdb.txt",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        }
+      ]
+    },
+    {
+      "name": "onetbb",
+      "revision": "v2022.2.0",
+      "repository": "https://github.com/uxlfoundation/oneTBB",
+      "url": "https://codeload.github.com/uxlfoundation/oneTBB/tar.gz/v2022.2.0",
+      "sha256": "f0f78001c8c8edb4bddc3d4c5ee7428d56ae313254158ad1eec49eced57f6a5b",
+      "licenses": [
+        {
+          "source": "LICENSE.txt",
+          "record": "deps/volume-licenses/onetbb.txt",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ]
+    },
+    {
+      "name": "blosc",
+      "revision": "v1.21.6",
+      "repository": "https://github.com/Blosc/c-blosc",
+      "url": "https://codeload.github.com/Blosc/c-blosc/tar.gz/v1.21.6",
+      "sha256": "9fcd60301aae28f97f1301b735f966cc19e7c49b6b4321b839b4579a0c156f38",
+      "licenses": [
+        {
+          "source": "LICENSE.txt",
+          "record": "deps/volume-licenses/blosc.txt",
+          "sha256": "22623131a9b9f6a86a4dc6b9bccbb1d2aeb390df86bca00fc727af24735c2fae"
+        },
+        {
+          "source": "LICENSES/LZ4.txt",
+          "record": "deps/volume-licenses/blosc-1.txt",
+          "sha256": "fe6dc1f27f68d9dd6b0192e39be1a8f1fbed0fe86e13540f618a7133971b10b3"
+        },
+        {
+          "source": "LICENSES/ZLIB.txt",
+          "record": "deps/volume-licenses/blosc-2.txt",
+          "sha256": "845efc77857d485d91fb3e0b884aaa929368c717ae8186b66fe1ed2495753243"
+        },
+        {
+          "source": "LICENSES/BITSHUFFLE.txt",
+          "record": "deps/volume-licenses/blosc-3.txt",
+          "sha256": "ef357c2061cf67db298f9f1565572ee229ad9263582a9f9d0ebff5094f5d10ac"
+        },
+        {
+          "source": "LICENSES/STDINT.txt",
+          "record": "deps/volume-licenses/blosc-4.txt",
+          "sha256": "f2af03db562e88539f019b1ab0881878ee82d0c80f3bce68c650064652e25d7b"
+        },
+        {
+          "source": "https://raw.githubusercontent.com/facebook/zstd/v1.5.6/LICENSE",
+          "record": "deps/volume-licenses/blosc-zstd.txt",
+          "sha256": "7055266497633c9025b777c78eb7235af13922117480ed5c674677adc381c9d8"
+        }
+      ]
+    }
+  ]
+}

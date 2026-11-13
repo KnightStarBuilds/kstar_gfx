@@ -49,11 +49,13 @@ bool controller_pump(void *user, demo::Input &input) {
     controller.history = {};
     return true;
   }
-  const uint32_t pressed = controller.history.consume(reports, size_t(count));
-  if (pressed & ORBIS_PAD_BUTTON_OPTIONS) {
-    std::puts("GNM_QUIT reason=options");
-    return false;
-  }
+  const uint32_t pressed = controller.history.consume(reports, size_t(count), ORBIS_PAD_BUTTON_L3);
+  const uint32_t modified = controller.history.modified_pressed;
+  input.menu_toggle = (pressed & ORBIS_PAD_BUTTON_OPTIONS) != 0;
+  input.menu_accept = (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
+  input.menu_back = (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0;
+  input.menu_vertical = int((pressed & ORBIS_PAD_BUTTON_DOWN) != 0) - int((pressed & ORBIS_PAD_BUTTON_UP) != 0);
+  input.menu_horizontal = int((pressed & ORBIS_PAD_BUTTON_RIGHT) != 0) - int((pressed & ORBIS_PAD_BUTTON_LEFT) != 0);
   const auto &data = controller.history.current;
   if (!data.connected)
     return true;
@@ -63,8 +65,40 @@ bool controller_pump(void *user, demo::Input &input) {
   input.next_environment = (pressed & ORBIS_PAD_BUTTON_TRIANGLE) != 0;
   input.next_diagnostic = (pressed & ORBIS_PAD_BUTTON_SQUARE) != 0;
   input.reset = (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
+  input.interact = (pressed & ORBIS_PAD_BUTTON_CROSS) != 0;
+  input.toggle_inspection = (pressed & ORBIS_PAD_BUTTON_CIRCLE) != 0;
+  input.walk_reset = (pressed & ORBIS_PAD_BUTTON_R3) != 0;
+  input.walkthrough_diagnostic = input.next_diagnostic;
+  input.scene_delta = input.menu_horizontal;
+  input.move_x = stick_axis(data.leftStick.x);
+  input.move_z = -stick_axis(data.leftStick.y);
+  input.look_x = stick_axis(data.rightStick.x)*1.8f*dt;
+  input.look_y = -stick_axis(data.rightStick.y)*1.5f*dt;
+  input.sprint = (data.buttons & ORBIS_PAD_BUTTON_L3) != 0;
   if (pressed & ORBIS_PAD_BUTTON_L1) input.exposure_stops -= .25f;
   if (pressed & ORBIS_PAD_BUTTON_R1) input.exposure_stops += .25f;
+  // L3 chords leave ordinary scene cycling and menu navigation intact. Use the
+  // modifier captured with the edge, not only the newest analog input report.
+  if (modified & ORBIS_PAD_BUTTON_SQUARE) {
+    input.toggle_animation = true;
+    input.next_diagnostic = input.walkthrough_diagnostic = false;
+  }
+  if (modified & ORBIS_PAD_BUTTON_TRIANGLE) {
+    input.cycle_light_color = true;
+    input.next_environment = false;
+  }
+  if (modified & ORBIS_PAD_BUTTON_CIRCLE) {
+    input.matched_lighting = true;
+    input.toggle_inspection = false;
+  }
+  if (modified & ORBIS_PAD_BUTTON_L1) {
+    input.light_intensity_delta -= .25f;
+    input.exposure_stops += .25f;
+  }
+  if (modified & ORBIS_PAD_BUTTON_R1) {
+    input.light_intensity_delta += .25f;
+    input.exposure_stops -= .25f;
+  }
   return true;
 }
 }
@@ -78,6 +112,7 @@ int main(int argc, char **argv) {
       std::puts(demo::usage());
       return 0;
     }
+    if (options.list_scenes) { demo::print_scenes(); return 0; }
     if (options.resources.empty())
       options.resources = "/app0/resources";
     // Headless runs remain independent of controller services and their state.
@@ -88,7 +123,7 @@ int main(int argc, char **argv) {
       controller.open();
       host = {&controller, controller_pump, nullptr};
     }
-    kgfx_gnm_config config{options.headless ? 0u : 1u, 2 * 1024 * 1024,
+    kgfx_gnm_config config{options.headless ? 0u : 1u, 8 * 1024 * 1024,
                            32 * 1024 * 1024};
     kgfx_device_desc desc{KGFX_ABI_VERSION, options.width, options.height, 3,
                           &config,          log_message,   nullptr};

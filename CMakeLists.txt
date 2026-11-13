@@ -10,6 +10,13 @@ set(CMAKE_C_EXTENSIONS OFF)
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# Emission accumulators cross integer thresholds: ARM fused multiply-add must
+# round the same way as the x86 guest's separate operations at fixed ticks.
+if(MSVC)
+    set_source_files_properties(src/demos/showcase_world.cpp src/demos/lighting_cpu.cpp PROPERTIES COMPILE_OPTIONS /fp:strict)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    set_source_files_properties(src/demos/showcase_world.cpp src/demos/lighting_cpu.cpp PROPERTIES COMPILE_OPTIONS -ffp-contract=off)
+endif()
 set(KSTAR_GFX_BACKEND "OPENGL" CACHE STRING "Compile-time backend: OPENGL or GNM")
 set_property(CACHE KSTAR_GFX_BACKEND PROPERTY STRINGS OPENGL GNM)
 option(KSTAR_GFX_BUILD_DEMOS "Build standalone graphics demos" ${PROJECT_IS_TOP_LEVEL})
@@ -18,6 +25,9 @@ option(KSTAR_GFX_BUILD_TOOLS "Build offline shader tools without demo assets" OF
 option(KSTAR_GFX_OFFLINE "Require cached, verified dependencies and assets" OFF)
 option(KSTAR_GFX_LTO "Enable release interprocedural optimization" ON)
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if(KSTAR_GFX_BUILD_DEMOS)
+    include(cmake/SceneCatalog.cmake)
+endif()
 
 add_library(kstar_gfx STATIC)
 add_library(kstar_gfx::kstar_gfx ALIAS kstar_gfx)
@@ -64,6 +74,18 @@ if(KSTAR_GFX_BUILD_TESTS)
         add_test(NAME kgfx_c_api COMMAND kgfx_c_api)
         add_executable(kgfx_pad_history tests/pad_history_test.cpp)
         add_test(NAME kgfx_pad_history COMMAND kgfx_pad_history)
+        add_executable(kgfx_graphics_settings tests/graphics_settings_test.cpp)
+        add_test(NAME kgfx_graphics_settings COMMAND kgfx_graphics_settings)
+        add_executable(kgfx_shadow_cache tests/shadow_cache_test.cpp)
+        add_test(NAME kgfx_shadow_cache COMMAND kgfx_shadow_cache)
+        add_executable(kgfx_water_surface tests/water_surface_test.cpp)
+        add_test(NAME kgfx_water_surface COMMAND kgfx_water_surface)
+        add_executable(kgfx_stream_geometry tests/stream_geometry_test.cpp)
+        add_test(NAME kgfx_stream_geometry COMMAND kgfx_stream_geometry)
+        add_executable(kgfx_showcase_world tests/showcase_world_test.cpp src/demos/showcase_world.cpp src/demos/lighting_cpu.cpp)
+        add_test(NAME kgfx_showcase_world COMMAND kgfx_showcase_world)
+        add_executable(kgfx_lighting_cpu tests/lighting_cpu_test.cpp src/demos/showcase_world.cpp src/demos/lighting_cpu.cpp)
+        add_test(NAME kgfx_lighting_cpu COMMAND kgfx_lighting_cpu "${CMAKE_CURRENT_SOURCE_DIR}/.tmp/lighting-tests")
     endif()
 endif()
 
@@ -72,6 +94,9 @@ if(KSTAR_GFX_BACKEND STREQUAL "OPENGL" AND (KSTAR_GFX_BUILD_DEMOS OR KSTAR_GFX_B
     kgfx_add_sdl()
 endif()
 if(KSTAR_GFX_BUILD_TESTS AND KSTAR_GFX_BACKEND STREQUAL "OPENGL")
+    add_executable(kgfx_gpu_timing tests/gpu_timing_test.cpp)
+    target_link_libraries(kgfx_gpu_timing PRIVATE kstar_gfx)
+    add_test(NAME kgfx_gpu_timing COMMAND kgfx_gpu_timing)
     add_executable(kgfx_conformance tests/conformance.cpp)
     target_link_libraries(kgfx_conformance PRIVATE kstar_gfx SDL2::SDL2-static ${CMAKE_DL_LIBS})
     add_executable(kgfx_dispatch_benchmark tests/dispatch_benchmark.cpp)
@@ -89,11 +114,14 @@ if(KSTAR_GFX_BUILD_DEMOS AND KSTAR_GFX_BACKEND STREQUAL "OPENGL")
     include(cmake/Shaders.cmake)
     kgfx_prepare_assets(cooked_assets)
     set(shader_dir "${CMAKE_BINARY_DIR}/resources/$<CONFIG>/shaders")
+    file(GLOB showcase_shaders CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}/shaders"
+        "${CMAKE_CURRENT_SOURCE_DIR}/shaders/showcase*.vert" "${CMAKE_CURRENT_SOURCE_DIR}/shaders/showcase*.frag")
     kgfx_compile_shaders(kgfx_shaders "${CMAKE_CURRENT_SOURCE_DIR}/shaders" "${shader_dir}" shader_outputs
         SOURCES triangle.vert triangle.frag scene.vert scene.frag shadow.vert shadow.frag
-            fullscreen.vert environment.frag tonemap.frag present.frag)
-    add_executable(kstar_gfx_demo src/demos/desktop_main.cpp src/demos/demo.cpp src/demos/assets.cpp)
-    target_include_directories(kstar_gfx_demo PRIVATE tools/include "${shader_dir}")
+            fullscreen.vert environment.frag tonemap.frag present.frag ${showcase_shaders})
+    add_executable(kstar_gfx_demo src/demos/desktop_main.cpp src/demos/demo.cpp src/demos/assets.cpp
+        src/demos/showcase_world.cpp src/demos/lighting_cpu.cpp src/demos/showcase_renderer.cpp)
+    target_include_directories(kstar_gfx_demo PRIVATE tools/include "${shader_dir}" "${KGFX_SCENE_INCLUDE_DIR}")
     target_link_libraries(kstar_gfx_demo PRIVATE kstar_gfx SDL2::SDL2-static)
     add_dependencies(kstar_gfx_demo kgfx_shaders kgfx_assets)
     # Refresh independently of relinking: shader/asset-only edits must reach demos.
@@ -135,12 +163,28 @@ install(FILES LICENSE DESTINATION ${CMAKE_INSTALL_DATADIR}/kstar_gfx)
 
 if(KSTAR_GFX_BUILD_TESTS AND TARGET kstar_gfx_demo AND KSTAR_GFX_BACKEND STREQUAL "OPENGL")
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME kgfx_demo_options COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/tests/demo_options_test.py" "$<TARGET_FILE:kstar_gfx_demo>")
+    add_executable(kgfx_demo_session tests/demo_session_test.cpp src/demos/demo.cpp src/demos/assets.cpp
+        src/demos/showcase_world.cpp src/demos/lighting_cpu.cpp src/demos/showcase_renderer.cpp)
+    target_include_directories(kgfx_demo_session PRIVATE tools/include "${shader_dir}" "${KGFX_SCENE_INCLUDE_DIR}")
+    target_link_libraries(kgfx_demo_session PRIVATE kstar_gfx SDL2::SDL2-static)
+    add_dependencies(kgfx_demo_session kgfx_demo_resources)
+    add_test(NAME kgfx_demo_session COMMAND kgfx_demo_session "$<TARGET_FILE_DIR:kstar_gfx_demo>/resources"
+        "${CMAKE_BINARY_DIR}/test-captures/$<CONFIG>/sessions")
+    set_tests_properties(kgfx_demo_session PROPERTIES LABELS "gpu;demo" TIMEOUT 300 RUN_SERIAL TRUE)
+    add_executable(kgfx_showcase_renderer_test tests/showcase_renderer_test.cpp src/demos/lighting_cpu.cpp src/demos/showcase_renderer.cpp src/demos/assets.cpp)
+    target_include_directories(kgfx_showcase_renderer_test PRIVATE src/demos tools/include "${shader_dir}")
+    target_link_libraries(kgfx_showcase_renderer_test PRIVATE kstar_gfx SDL2::SDL2-static)
+    add_dependencies(kgfx_showcase_renderer_test kgfx_demo_resources)
+    add_test(NAME kgfx_showcase_renderer COMMAND kgfx_showcase_renderer_test "$<TARGET_FILE_DIR:kstar_gfx_demo>/resources")
+    set_tests_properties(kgfx_showcase_renderer PROPERTIES LABELS "gpu;showcase" TIMEOUT 180 RUN_SERIAL TRUE)
     add_test(NAME kgfx_capture_comparison
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/capture_comparison_test.py")
     add_test(NAME kgfx_gnm_demo_runner
         COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/gnm_demo_runner_test.py")
     set_tests_properties(kgfx_gnm_demo_runner PROPERTIES TIMEOUT 30)
-    foreach(scene triangle cubes instances offscreen stress pbr)
+    foreach(scene IN LISTS KGFX_LEGACY_SCENES)
         add_test(NAME kgfx_demo_${scene}
             COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/demo_capture_test.py"
                 $<TARGET_FILE:kstar_gfx_demo> --scene ${scene}
@@ -160,5 +204,39 @@ if(KSTAR_GFX_BUILD_TESTS AND TARGET kstar_gfx_demo AND KSTAR_GFX_BACKEND STREQUA
                     --scratch "${CMAKE_BINARY_DIR}/test-captures/$<CONFIG>")
             set_tests_properties(kgfx_demo_pbr_${view}_${environment} PROPERTIES LABELS "gpu;demo" TIMEOUT 180 RUN_SERIAL TRUE)
         endforeach()
+    endforeach()
+    foreach(scene IN LISTS KGFX_SHOWCASE_SCENES)
+        add_test(NAME kgfx_showcase_${scene}
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/showcase_capture_test.py"
+                $<TARGET_FILE:kstar_gfx_demo> --scene ${scene} --samples 1
+                --scratch "${CMAKE_BINARY_DIR}/test-captures/$<CONFIG>")
+        set_tests_properties(kgfx_showcase_${scene} PROPERTIES LABELS "gpu;showcase" TIMEOUT 900 RUN_SERIAL TRUE)
+    endforeach()
+    foreach(scene waterworks boiler_room)
+        add_test(NAME kgfx_showcase_${scene}_msaa4
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/showcase_capture_test.py"
+                $<TARGET_FILE:kstar_gfx_demo> --scene ${scene} --samples 4 --environment 1
+                --scratch "${CMAKE_BINARY_DIR}/test-captures/$<CONFIG>")
+        set_tests_properties(kgfx_showcase_${scene}_msaa4 PROPERTIES LABELS "gpu;showcase" TIMEOUT 900 RUN_SERIAL TRUE)
+    endforeach()
+    foreach(scene glass_lab waterworks)
+        foreach(samples 1 4)
+            add_test(NAME kgfx_showcase_${scene}_diagnostics_msaa${samples}
+                COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/showcase_capture_test.py"
+                    $<TARGET_FILE:kstar_gfx_demo> --scene ${scene} --samples ${samples} --diagnostics
+                    --scratch "${CMAKE_BINARY_DIR}/test-captures/$<CONFIG>")
+            set_tests_properties(kgfx_showcase_${scene}_diagnostics_msaa${samples}
+                PROPERTIES LABELS "gpu;showcase" TIMEOUT 240 RUN_SERIAL TRUE)
+        endforeach()
+    endforeach()
+endif()
+
+# The demo's two persistent GI workers are independent of the C rendering ABI.
+if(NOT CMAKE_CROSSCOMPILING AND (KSTAR_GFX_BUILD_DEMOS OR KSTAR_GFX_BUILD_TESTS))
+    find_package(Threads REQUIRED)
+    foreach(target kstar_gfx_demo kgfx_demo_session kgfx_showcase_world kgfx_lighting_cpu kgfx_showcase_renderer_test kgfx_lighting_cooker)
+        if(TARGET ${target})
+            target_link_libraries(${target} PRIVATE Threads::Threads)
+        endif()
     endforeach()
 endif()

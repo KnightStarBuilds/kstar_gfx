@@ -90,5 +90,5 @@ Mesh make_sphere(Resources&r,uint32_t slices,uint32_t stacks){
     for(uint32_t y=0;y<stacks;++y)for(uint32_t x=0;x<slices;++x){uint32_t a=y*(slices+1)+x,b=a+slices+1;i.insert(i.end(),{a,a+1,b,a+1,b+1,b});}
     return upload_mesh(r,v,i);
 }
-Mesh make_plane(Resources&r){std::vector<Vertex>v;for(int z=0;z<2;++z)for(int x=0;x<2;++x)v.push_back(vertex({float(x)-.5f,0,float(z)-.5f},{0,1,0},{1,0,0,-1},{float(x),float(z)}));return upload_mesh(r,v,{0,2,1,1,2,3});}
+Mesh make_plane(Resources&r,float uv_repeat){std::vector<Vertex>v;for(int z=0;z<2;++z)for(int x=0;x<2;++x)v.push_back(vertex({float(x)-.5f,0,float(z)-.5f},{0,1,0},{1,0,0,-1},{float(x)*uv_repeat,float(z)*uv_repeat}));return upload_mesh(r,v,{0,2,1,1,2,3});}
 }

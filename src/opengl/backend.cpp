@@ -10,7 +10,7 @@
 
 namespace {
 constexpr unsigned max_frames = 8;
-enum class Kind { buffer, texture, sampler, pipeline, readback };
+enum class Kind { buffer, texture, sampler, pipeline, readback, gpu_timer };
 struct Resource {
   kgfx_device *owner{};
   Resource *next{}, *previous{}, *retired_next{};
@@ -70,6 +70,12 @@ struct kgfx_readback : Resource {
   kgfx_readback_data data{};
   bool ready{};
 };
+struct kgfx_gpu_timer : Resource {
+  enum class State { empty, recording, pending, ready };
+  GLuint queries[2]{};
+  kgfx_gpu_timer_result result{};
+  State state{};
+};
 struct kgfx_device {
   GlApi gl{};
   kgfx_gl_config config{};
@@ -92,6 +98,7 @@ struct kgfx_device {
   GLenum texture_targets[KGFX_MAX_TEXTURE_BINDINGS]{};
   void *upload_scratch{};
   size_t upload_capacity{};
+  unsigned timestamp_bits{};
 };
 namespace {
 kgfx_result fail(kgfx_device *d, kgfx_result r, const char *message) {
@@ -206,6 +213,12 @@ void release(kgfx_device *d, Resource *r) {
     gl.DeleteBuffers(1, &b->pbo);
     std::free(b->pixels);
     delete b;
+    break;
+  }
+  case Kind::gpu_timer: {
+    auto *timer = static_cast<kgfx_gpu_timer *>(r);
+    gl.DeleteQueries(2, timer->queries);
+    delete timer;
     break;
   }
   }
@@ -340,6 +353,11 @@ extern "C" kgfx_result kgfx_device_create(const kgfx_device_desc *desc,
   d->gl.GetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &value);
   d->caps.max_texture_bindings =
       std::min<unsigned>(value, KGFX_MAX_TEXTURE_BINDINGS);
+  if (d->gl.has_timing()) {
+    d->gl.GetQueryiv(GL_TIMESTAMP, GL_QUERY_COUNTER_BITS, &value);
+    if (value >= 30 && value <= 64)
+      d->timestamp_bits = static_cast<unsigned>(value);
+  }
   auto *name = d->gl.GetString(GL_RENDERER);
   std::snprintf(d->caps.renderer, sizeof(d->caps.renderer), "%s",
                 name ? reinterpret_cast<const char *>(name) : "unknown");
@@ -1095,6 +1113,84 @@ extern "C" kgfx_result kgfx_readback_map(kgfx_device *d, kgfx_readback *b,
 extern "C" void kgfx_readback_destroy(kgfx_device *d, kgfx_readback *b) {
   if (b)
     retire(d, b);
+}
+extern "C" kgfx_result kgfx_gpu_timer_create(kgfx_device *d,
+                                               kgfx_gpu_timer **out) {
+  if (!out)
+    return KGFX_INVALID_ARGUMENT;
+  *out = nullptr;
+  if (!thread_ok(d))
+    return KGFX_INVALID_ARGUMENT;
+  if (!d->timestamp_bits)
+    return KGFX_UNSUPPORTED;
+  auto *timer = new (std::nothrow) kgfx_gpu_timer;
+  if (!timer)
+    return KGFX_OUT_OF_MEMORY;
+  d->gl.GenQueries(2, timer->queries);
+  auto result = driver_result(d, "create GPU timer");
+  if (result != KGFX_OK) {
+    d->gl.DeleteQueries(2, timer->queries);
+    delete timer;
+    return result;
+  }
+  attach(d, timer, Kind::gpu_timer);
+  *out = timer;
+  return KGFX_OK;
+}
+extern "C" kgfx_result kgfx_gpu_timer_begin(kgfx_device *d,
+                                              kgfx_gpu_timer *timer) {
+  if (!thread_ok(d) || !valid(d, timer) || !d->frame ||
+      timer->state == kgfx_gpu_timer::State::recording)
+    return KGFX_INVALID_ARGUMENT;
+  if (timer->state == kgfx_gpu_timer::State::pending)
+    return KGFX_NOT_READY;
+  d->gl.QueryCounter(timer->queries[0], GL_TIMESTAMP);
+  timer->result = {d->stats.frame_serial + 1, 0};
+  timer->state = kgfx_gpu_timer::State::recording;
+  return KGFX_OK;
+}
+extern "C" kgfx_result kgfx_gpu_timer_end(kgfx_device *d,
+                                            kgfx_gpu_timer *timer) {
+  if (!thread_ok(d) || !valid(d, timer) || !d->frame ||
+      timer->state != kgfx_gpu_timer::State::recording ||
+      timer->result.frame_serial != d->stats.frame_serial + 1)
+    return KGFX_INVALID_ARGUMENT;
+  d->gl.QueryCounter(timer->queries[1], GL_TIMESTAMP);
+  timer->state = kgfx_gpu_timer::State::pending;
+  return KGFX_OK;
+}
+extern "C" kgfx_result kgfx_gpu_timer_read(kgfx_device *d,
+                                             kgfx_gpu_timer *timer,
+                                             kgfx_gpu_timer_result *out) {
+  if (!thread_ok(d) || !valid(d, timer) || !out)
+    return KGFX_INVALID_ARGUMENT;
+  if (timer->state == kgfx_gpu_timer::State::empty ||
+      timer->state == kgfx_gpu_timer::State::recording)
+    return KGFX_NOT_READY;
+  if (timer->state == kgfx_gpu_timer::State::pending) {
+    // Never request a blocking result until both timestamp queries are ready.
+    GLint ready[2]{};
+    d->gl.GetQueryObjectiv(timer->queries[0], GL_QUERY_RESULT_AVAILABLE, &ready[0]);
+    d->gl.GetQueryObjectiv(timer->queries[1], GL_QUERY_RESULT_AVAILABLE, &ready[1]);
+    if (!ready[0] || !ready[1])
+      return KGFX_NOT_READY;
+    GLuint64 stamps[2]{};
+    d->gl.GetQueryObjectui64v(timer->queries[0], GL_QUERY_RESULT, &stamps[0]);
+    d->gl.GetQueryObjectui64v(timer->queries[1], GL_QUERY_RESULT, &stamps[1]);
+    // Counters may wrap at fewer than 64 bits; unsigned subtraction plus the
+    // native counter mask preserves short intervals that straddle a wrap.
+    const uint64_t mask = d->timestamp_bits == 64
+                              ? UINT64_MAX
+                              : (uint64_t{1} << d->timestamp_bits) - 1;
+    timer->result.elapsed_ns = (stamps[1] - stamps[0]) & mask;
+    timer->state = kgfx_gpu_timer::State::ready;
+  }
+  *out = timer->result;
+  return KGFX_OK;
+}
+extern "C" void kgfx_gpu_timer_destroy(kgfx_device *d, kgfx_gpu_timer *timer) {
+  if (timer)
+    retire(d, timer);
 }
 extern "C" void kgfx_get_stats(const kgfx_device *d, kgfx_stats *out) {
   if (d && out)

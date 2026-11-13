@@ -74,18 +74,18 @@
     "opengnm": {
       "schema": 1,
       "name": "opengnm",
-      "revision": "4b295ca54c82c83acf308d1c646a2dfa9ae57350",
+      "revision": "e9a668676ffa405e28a935ac5b76bec67f6d7ffa",
       "tree_sha256": "8f6ad29be78024203973b28a2a5d18bd9221d7e20ef6921c8ca8386f1827d4ab",
-      "identity": "2d58f27be82913ffbd9b182c09cbcd93adacb3df21f6b855c398404107f738df",
-      "dirty": true
+      "identity": "e136824055eca937b03165d269a02c8f20b4e0d1668830de8cab1cf3b1dc0735",
+      "dirty": false
     },
     "opengnm-psbc": {
       "schema": 1,
       "name": "opengnm-psbc",
-      "revision": "a92a1228ea3a64e4be9f0e61c2a65a5aa7ffed92",
-      "tree_sha256": "fe30de26a015a74a44660e30832bfe4fa45177f6f72cbfedadf0dfa137e6d134",
-      "identity": "71599d1b232e00a7433406df4261d44f1cb29c98333adce538f61cce981e20d0",
-      "dirty": true
+      "revision": "63977503c1af4199888bfe91b098082688411cae",
+      "tree_sha256": "7283c04b34f0919590c62fb3ec60eb67a5d110af8db55660c70a1de62bf0b8c2",
+      "identity": "a95427cb1a3287972b58588c24a709d03b3006b2f13b9a26da31282afabdf920",
+      "dirty": false
     }
   },
   "generator_sha256": "e2b7143db773ededf9691272f7498db7d90040e1a9c7533386eb00f3e9830e23",

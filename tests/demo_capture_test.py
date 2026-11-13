@@ -10,6 +10,10 @@ import json
 import pathlib
 import subprocess
 import tempfile
+import sys
+sys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"tools"))
+from scene_catalog import load as load_scene_catalog
+LEGACY_SCENES={s["id"]:s for s in load_scene_catalog()["scenes"] if not s["walkthrough"]}
 
 
 def read_ppm(path):
@@ -67,11 +71,13 @@ def main():
     parser.add_argument("executable", type=pathlib.Path)
     parser.add_argument("--resources", type=pathlib.Path)
     parser.add_argument("--scene", default="triangle",
-                        choices=("triangle", "cubes", "instances", "offscreen", "stress", "pbr"))
+                        choices=tuple(LEGACY_SCENES))
     parser.add_argument("--scratch", type=pathlib.Path, required=True)
     parser.add_argument("--environment", choices=("0", "1"), default="0")
-    parser.add_argument("--view", choices=("overview", "rifle", "hat"), default="overview")
+    parser.add_argument("--view", choices=sorted({view for scene in LEGACY_SCENES.values() for view in scene["views"]}), default="overview")
     args = parser.parse_args()
+    if args.view not in LEGACY_SCENES[args.scene]["views"]:
+        parser.error("View is unavailable in selected scene")
     args.scratch = args.scratch.resolve()
     args.scratch.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=args.scratch, prefix="gpu-capture-") as temp:

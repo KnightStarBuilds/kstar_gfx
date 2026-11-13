@@ -238,7 +238,7 @@ void cook_texture(const fs::path &source, const fs::path &output, bool color,
 std::string texture_path(const cgltf_texture_view &view,
                          const fs::path &model_dir, const fs::path &out_dir,
                          bool color, bool normal, bool glass,
-                         std::map<std::string, std::string> &done) {
+                         std::map<std::string, std::string> &done, bool reuse = false) {
   if (!view.texture)
     return {};
   if (view.texcoord != 0 || view.has_transform)
@@ -266,7 +266,9 @@ std::string texture_path(const cgltf_texture_view &view,
                               : ":data");
   if (auto it = done.find(key); it != done.end())
     return it->second;
-  cook_texture(source, out_dir / relative, color, normal, alpha);
+  // Shared model components reuse the already cooked, immutable material map.
+  if (!reuse || !fs::exists(out_dir / relative))
+    cook_texture(source, out_dir / relative, color, normal, alpha);
   done[key] = relative;
   return relative;
 }
@@ -310,7 +312,8 @@ void mikk_set(const SMikkTSpaceContext *c, const float t[], float sign, int f,
   std::memcpy(dst.tangent, t, 12);
   dst.tangent[3] = sign;
 }
-void cook_model(const fs::path &source, const fs::path &output) {
+void cook_model(const fs::path &source, const fs::path &output,
+                const std::string &component = {}) {
   cgltf_options options{};
   cgltf_data *raw = nullptr;
   if (cgltf_parse_file(&options, source.string().c_str(), &raw) !=
@@ -344,16 +347,16 @@ void cook_model(const fs::path &source, const fs::path &output) {
         std::string(s.name ? s.name : "").find("glass") != std::string::npos;
     put_path(d.base_color_texture,
              texture_path(p.base_color_texture, source.parent_path(),
-                          output.parent_path(), true, false, glass, done));
+                          output.parent_path(), true, false, glass, done, !component.empty()));
     put_path(d.normal_texture,
              texture_path(s.normal_texture, source.parent_path(),
-                          output.parent_path(), false, true, false, done));
+                          output.parent_path(), false, true, false, done, !component.empty()));
     put_path(d.material_texture,
              texture_path(p.metallic_roughness_texture, source.parent_path(),
-                          output.parent_path(), false, false, false, done));
+                          output.parent_path(), false, false, false, done, !component.empty()));
     put_path(d.emissive_texture,
              texture_path(s.emissive_texture, source.parent_path(),
-                          output.parent_path(), true, false, false, done));
+                          output.parent_path(), true, false, false, done, !component.empty()));
     materials.push_back(d);
   }
   std::vector<kgfx_asset_vertex> vertices;
@@ -361,10 +364,12 @@ void cook_model(const fs::path &source, const fs::path &output) {
   std::vector<kgfx_asset_primitive> primitives;
   for (size_t n = 0; n < raw->nodes_count; ++n) {
     auto &node = raw->nodes[n];
-    if (!node.mesh)
+    if (!node.mesh || (!component.empty() && component != (node.name ? node.name : "")))
       continue;
     float m[16];
     cgltf_node_transform_world(&node, m);
+    // Modular pieces keep authored rotation/scale but remove the layout offset.
+    if (!component.empty()) m[12] = m[13] = m[14] = 0;
     V3 col0{m[0], m[1], m[2]}, col1{m[4], m[5], m[6]}, col2{m[8], m[9], m[10]};
     float determinant = dot(col0, cross(col1, col2));
     if (std::abs(determinant) < 1e-10f)
@@ -440,6 +445,8 @@ void cook_model(const fs::path &source, const fs::path &output) {
       primitives.push_back(desc);
     }
   }
+  if (vertices.empty())
+    throw std::runtime_error("Model component has no triangle geometry: " + component);
   kgfx_model_file header{};
   std::memcpy(header.magic, "KGMODEL", 7);
   header.version = KGFX_ASSET_VERSION;
@@ -721,6 +728,18 @@ void self_test() {
   auto mip = downsample(checker, true, false);
   require(std::abs(mip.rgba[0] - .73535698f) < 1e-5f,
           "sRGB mips must filter in linear light");
+  auto linear_mip = downsample(checker, false, false);
+  require(std::abs(linear_mip.rgba[0] - .5f) < 1e-6f,
+          "Packed material maps must filter without sRGB conversion");
+  Image normals{2, 2, {1, .5f, .5f, 1, .5f, 1, .5f, 1,
+                      .5f, .5f, 1, 1, .5f, .5f, 1, 1}};
+  auto normal_mip = downsample(normals, false, true);
+  V3 filtered_normal{normal_mip.rgba[0] * 2 - 1,
+                     normal_mip.rgba[1] * 2 - 1,
+                     normal_mip.rgba[2] * 2 - 1};
+  require(std::abs(dot(filtered_normal, filtered_normal) - 1) < 1e-6f &&
+              std::abs(filtered_normal.z - 2 / std::sqrt(6.f)) < 1e-6f,
+          "Normal mipmaps must renormalize the filtered direction");
   Environment env;
   Image constant{8, 4, std::vector<float>(128)};
   for (size_t i = 0; i < constant.rgba.size(); i += 4) {
@@ -820,16 +839,22 @@ int main(int argc, char **argv) {
       self_test();
       return 0;
     }
-    if (argc != 4)
+    if (argc != 4 && argc != 5)
       throw std::runtime_error("Usage: kgfx_asset_cooker model|environment "
+                               "INPUT OUTPUT, texture color|normal|linear "
                                "INPUT OUTPUT or --self-test");
     if (std::endian::native != std::endian::little)
       throw std::runtime_error(
           "Asset writer currently requires a little-endian host");
     std::string command = argv[1];
-    if (command == "model")
-      cook_model(argv[2], argv[3]);
-    else if (command == "environment")
+    if (command == "texture" && argc == 5) {
+      const std::string type = argv[2];
+      if (type != "color" && type != "normal" && type != "linear")
+        throw std::runtime_error("Texture type must be color, normal or linear");
+      cook_texture(argv[3], argv[4], type == "color", type == "normal");
+    } else if (command == "model" && (argc == 4 || argc == 5))
+      cook_model(argv[2], argv[3], argc == 5 ? argv[4] : "");
+    else if (command == "environment" && argc == 4)
       cook_environment(argv[2], argv[3]);
     else
       throw std::runtime_error("Unknown cooker command");

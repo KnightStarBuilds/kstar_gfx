@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #include <kstar_gfx/gfx.h>
 #include <kstar_gfx/opengl.h>
+#include "hdr_resolve_load.hpp"
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <cmath>
@@ -104,6 +105,56 @@ static void pixel(const kgfx_readback_data &data, unsigned x, unsigned y, int r,
   CHECK(std::abs(int(p[2]) - b) <= 2);
   CHECK(std::abs(int(p[3]) - a) <= 2);
 }
+static void gpu_timer_check(kgfx_texture *color) {
+  kgfx_gpu_timer *outer{}, *inner{};
+  auto support = kgfx_gpu_timer_create(d, &outer);
+  CHECK(support == KGFX_OK || support == KGFX_UNSUPPORTED);
+  if (support == KGFX_UNSUPPORTED) {
+    CHECK(!outer);
+    std::puts("GPU timestamps: unsupported by this native driver");
+    return;
+  }
+  OK(kgfx_gpu_timer_create(d, &inner));
+  kgfx_gpu_timer_result first{91, 92}, second{};
+  CHECK(kgfx_gpu_timer_read(d, outer, &first) == KGFX_NOT_READY);
+  CHECK(first.frame_serial == 91 && first.elapsed_ns == 92);
+  CHECK(kgfx_gpu_timer_begin(d, outer) == KGFX_INVALID_ARGUMENT);
+  OK(kgfx_frame_begin(d));
+  OK(kgfx_gpu_timer_begin(d, outer));
+  CHECK(kgfx_gpu_timer_begin(d, outer) == KGFX_INVALID_ARGUMENT);
+  OK(kgfx_gpu_timer_begin(d, inner));
+  pass(color);
+  kgfx_pass_end(d);
+  OK(kgfx_gpu_timer_end(d, inner));
+  OK(kgfx_gpu_timer_end(d, outer));
+  CHECK(kgfx_gpu_timer_begin(d, outer) == KGFX_NOT_READY);
+  const auto completion = kgfx_submit(d, 0);
+  CHECK(completion);
+  // Explicit completion belongs to the test; timer reads never request it.
+  kgfx_device_wait_idle(d);
+  OK(kgfx_gpu_timer_read(d, outer, &first));
+  OK(kgfx_gpu_timer_read(d, inner, &second));
+  CHECK(first.frame_serial == completion && second.frame_serial == completion);
+  CHECK(first.elapsed_ns >= second.elapsed_ns);
+  OK(kgfx_gpu_timer_read(d, outer, &second));
+  CHECK(first.frame_serial == second.frame_serial &&
+        first.elapsed_ns == second.elapsed_ns);
+  OK(kgfx_frame_begin(d));
+  allocation_count = 0;
+  track_allocations = true;
+  OK(kgfx_gpu_timer_begin(d, outer));
+  OK(kgfx_gpu_timer_end(d, outer));
+  const auto read = kgfx_gpu_timer_read(d, outer, &second);
+  track_allocations = false;
+  CHECK(read == KGFX_OK || read == KGFX_NOT_READY);
+  CHECK(allocation_count == 0);
+  // Both a pending and an unused timer share completion retirement ownership.
+  kgfx_gpu_timer_destroy(d, outer);
+  kgfx_gpu_timer_destroy(d, inner);
+  CHECK(kgfx_submit(d, 0));
+  std::printf("GPU timestamps: nested clear interval %llu ns\n",
+              static_cast<unsigned long long>(first.elapsed_ns));
+}
 int main() {
   SDL_SetMainReady();
   CHECK(SDL_Init(SDL_INIT_VIDEO) == 0);
@@ -126,6 +177,7 @@ int main() {
   auto *copy = texture(KGFX_RGBA8);
   auto *depth = texture(KGFX_DEPTH32F);
   auto *msaa = texture(KGFX_RGBA8, 4);
+  gpu_timer_check(color);
   // Padded, asymmetric CPU rows must survive upload, LOAD, partial copy and
   // top-first readback. Symmetric clears cannot reveal a flipped upload.
   constexpr size_t upload_pitch = 64 * 4 + 16;
@@ -293,6 +345,26 @@ int main() {
   kgfx_texture_destroy(d, msaa);
   auto done = kgfx_submit(d, 0);
   OK(kgfx_wait(d, done, UINT64_MAX));
+  // Match the guest attributes shader's public 0..1 depth convention while
+  // using native GL's -1..1 clip depth. The shared test owns all numeric checks.
+  const char *hdr_vertex = R"GLSL(#version 410 core
+layout(location=0) in vec3 position;
+layout(location=3) in vec4 vertex_color;
+layout(std140) uniform kgfx_u0 { vec4 tint; vec4 control; };
+out vec4 color;
+void main() {
+  gl_Position = vec4(position.x * .4 + (gl_InstanceID == 0 ? -.45 : .45),
+                     position.y * .8, control.x * 2 - 1, 1);
+  color = vertex_color * tint;
+}
+)GLSL";
+  const char *hdr_fragment = R"GLSL(#version 410 core
+in vec4 color;
+out vec4 output_color;
+void main() { output_color = color; }
+)GLSL";
+  CHECK(hdr_resolve_load_check(d, {hdr_vertex, std::strlen(hdr_vertex)},
+                              {hdr_fragment, std::strlen(hdr_fragment)}));
   kgfx_device_wait_idle(d);
   kgfx_stats stats{};
   kgfx_get_stats(d, &stats);
@@ -306,6 +378,7 @@ int main() {
   SDL_DestroyWindow(w);
   SDL_Quit();
   std::puts("PASS: C API, blend/depth, scissor/copy orientation, MSAA resolve, "
-            "upload slots, completion retirement, zero library hot-path C++ "
+            "HDR resolve/LOAD depth preservation, upload slots, completion retirement, "
+            "zero library hot-path C++ "
             "allocations");
 }

@@ -1,5 +1,7 @@
 // kstar_gfx GNM backend. Direct definitions: no runtime backend selection.
+#include "multisample_state.hpp"
 #include "shaders/resolve.inc"
+#include "guardband.h"
 #include <gnm_drawcommandbuffer.h>
 #include <gnm_helpers.h>
 #include <gnmdriver.h>
@@ -352,25 +354,8 @@ static void context_register(kgfx_device *d, uint32_t reg, uint32_t value) {
   *c->cmdptr++ = value;
 }
 static void multisample_state(kgfx_device *d, uint32_t samples) {
-  const uint32_t n = samples == 4 ? 2 : 0;
-  context_register(d, R_028BE0_PA_SC_AA_CONFIG,
-                   S_028BE0_MSAA_NUM_SAMPLES(n) |
-                       S_028BE0_MSAA_EXPOSED_SAMPLES(n) |
-                       S_028BE0_MAX_SAMPLE_DIST(n ? 6 : 0));
-  context_register(d, R_028804_DB_EQAA,
-                   S_028804_MAX_ANCHOR_SAMPLES(n) |
-                       S_028804_MASK_EXPORT_NUM_SAMPLES(n) |
-                       S_028804_ALPHA_TO_MASK_NUM_SAMPLES(n) |
-                       S_028804_HIGH_QUALITY_INTERSECTIONS(1) |
-                       S_028804_STATIC_ANCHOR_ASSOCIATIONS(1));
-  // Standard rotated grid, in sixteenths of a pixel. Identical in each quad
-  // pixel.
-  for (uint32_t pixel = 0; pixel < 4; ++pixel)
-    for (uint32_t word = 0; word < 4; ++word)
-      context_register(d, 0x028bf8 + pixel * 16 + word * 4,
-                       samples == 4 && word == 0 ? 0x622ae6ae : 0);
-  context_register(d, 0x028c38, 0xffffffff);
-  context_register(d, 0x028c3c, 0xffffffff);
+  auto *c = cmd(d);
+  c->cmdptr = kgfx_gnm::write_multisample_state(c->cmdptr, samples);
 }
 // Base-GFX7 depth expansion: disable depth/stencil compression during a
 // rectangle draw. This is the pre-GFX8 path; DECOMPRESS_ENABLE is not used.
@@ -417,6 +402,25 @@ static bool owned(kgfx_device *d, resource *r) {
 } // namespace
 extern "C" {
 const char *kgfx_backend_name(void) { return "GNM"; }
+// GPU clocks and timestamp packet readback have not been validated on GNM.
+// Expose the same optional API without presenting CPU time as GPU evidence.
+kgfx_result kgfx_gpu_timer_create(kgfx_device *d, kgfx_gpu_timer **out) {
+  if (!out)
+    return KGFX_INVALID_ARGUMENT;
+  *out = nullptr;
+  return d ? KGFX_UNSUPPORTED : KGFX_INVALID_ARGUMENT;
+}
+kgfx_result kgfx_gpu_timer_begin(kgfx_device *d, kgfx_gpu_timer *timer) {
+  return d && timer ? KGFX_UNSUPPORTED : KGFX_INVALID_ARGUMENT;
+}
+kgfx_result kgfx_gpu_timer_end(kgfx_device *d, kgfx_gpu_timer *timer) {
+  return d && timer ? KGFX_UNSUPPORTED : KGFX_INVALID_ARGUMENT;
+}
+kgfx_result kgfx_gpu_timer_read(kgfx_device *d, kgfx_gpu_timer *timer,
+                                kgfx_gpu_timer_result *out) {
+  return d && timer && out ? KGFX_UNSUPPORTED : KGFX_INVALID_ARGUMENT;
+}
+void kgfx_gpu_timer_destroy(kgfx_device *, kgfx_gpu_timer *) {}
 kgfx_result kgfx_device_create(const kgfx_device_desc *desc,
                                kgfx_device **out) {
   if (!desc || !out || desc->abi_version != KGFX_ABI_VERSION || !desc->width ||
@@ -986,6 +990,13 @@ kgfx_result kgfx_frame_begin(kgfx_device *d) {
   sceGnmDrawCmdSetViewportTransformControl(&f.cmd, &transform);
   // Offline vertex specialization already maps GL clip depth into [0,w].
   context_register(d, R_028810_PA_CL_CLIP_CNTL, S_028810_DX_CLIP_SPACE_DEF(1));
+  // Guardband limits below assume signed 16.8 screen coordinates, half-pixel
+  // centers and no additional hardware screen translation.
+  context_register(d, R_028BE4_PA_SU_VTX_CNTL,
+                   S_028BE4_PIX_CENTER(1) |
+                       S_028BE4_ROUND_MODE(V_028BE4_X_ROUND_TO_EVEN) |
+                       S_028BE4_QUANT_MODE(V_028BE4_X_16_8_FIXED_POINT_1_256TH));
+  sceGnmDrawCmdSetHwScreenOffset(&f.cmd, 0, 0);
   sceGnmDrawCmdSetInstanceStepRate(&f.cmd, 1, 1);
   sceGnmDrawCmdSetPrimitiveType(&f.cmd, GNM_PT_TRILIST);
   return KGFX_OK;
@@ -1081,7 +1092,6 @@ void kgfx_bind_pipeline(kgfx_device *d, kgfx_pipeline *p) {
     sceGnmDrawCmdSetPointerUserData(cmd(d), GNM_STAGE_VS, slot, nullptr);
     sceGnmDrawCmdSetPointerUserData(cmd(d), GNM_STAGE_PS, slot, nullptr);
   }
-  sceGnmDrawCmdSetGuardBands(cmd(d), 32767, 32767, 1, 1);
   sceGnmDrawCmdSetVsShader(cmd(d), &p->vsregs, 0);
   sceGnmDrawCmdSetPsShader(cmd(d), &p->psregs);
   const auto *vs = static_cast<const GnmVsShader *>(p->vs.meta.stage);
@@ -1106,6 +1116,9 @@ void kgfx_viewport(kgfx_device *d, int32_t x, int32_t y, uint32_t w,
   v.offset[0] = x + w * .5f;
   v.offset[1] = y + h * .5f;
   sceGnmDrawCmdSetViewport(cmd(d), 0, &v);
+  sceGnmDrawCmdSetGuardBands(
+      cmd(d), kgfx_gnm_guardband_axis(v.scale[0], v.offset[0]),
+      kgfx_gnm_guardband_axis(v.scale[1], v.offset[1]), 1, 1);
 }
 void kgfx_scissor(kgfx_device *d, int32_t x, int32_t y, uint32_t w,
                   uint32_t h) {

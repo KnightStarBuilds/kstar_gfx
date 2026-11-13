@@ -17,6 +17,7 @@ typedef struct kgfx_texture kgfx_texture;
 typedef struct kgfx_sampler kgfx_sampler;
 typedef struct kgfx_pipeline kgfx_pipeline;
 typedef struct kgfx_readback kgfx_readback;
+typedef struct kgfx_gpu_timer kgfx_gpu_timer;
 typedef uint64_t kgfx_completion;
 
 typedef enum kgfx_result { KGFX_OK=0, KGFX_INVALID_ARGUMENT, KGFX_UNSUPPORTED,
@@ -117,6 +118,9 @@ typedef struct kgfx_readback_data {
     uint32_t width, height;
     kgfx_format format;
 } kgfx_readback_data;
+typedef struct kgfx_gpu_timer_result {
+    uint64_t frame_serial, elapsed_ns;
+} kgfx_gpu_timer_result;
 
 kgfx_result kgfx_device_create(const kgfx_device_desc *, kgfx_device **);
 void kgfx_device_destroy(kgfx_device *);
@@ -155,6 +159,21 @@ kgfx_result kgfx_wait(kgfx_device *, kgfx_completion, uint64_t timeout_ns);
 kgfx_result kgfx_readback_begin(kgfx_device *, kgfx_texture *, kgfx_readback **);
 kgfx_result kgfx_readback_map(kgfx_device *, kgfx_readback *, kgfx_readback_data *);
 void kgfx_readback_destroy(kgfx_device *, kgfx_readback *);
+/* Optional asynchronous GPU timing; existing ABI structures are unchanged.
+   Create outside ordinary frames and retain a bounded ring for in-flight samples.
+   KGFX_UNSUPPORTED means native timestamps are unavailable; do not substitute CPU
+   time. Begin/end must occur in the same frame, may surround passes and copies,
+   and different timers may overlap. Begin returns KGFX_NOT_READY until the
+   previous sample has been read. Read never waits: it returns KGFX_NOT_READY
+   until both timestamps are available, leaves output untouched on failure, and
+   caches a successful result until the next begin. Keep intervals below one
+   second for portability to implementations with 30-bit nanosecond counters.
+   Destroy follows normal deferred resource ownership, including pending timers. */
+kgfx_result kgfx_gpu_timer_create(kgfx_device *, kgfx_gpu_timer **);
+kgfx_result kgfx_gpu_timer_begin(kgfx_device *, kgfx_gpu_timer *);
+kgfx_result kgfx_gpu_timer_end(kgfx_device *, kgfx_gpu_timer *);
+kgfx_result kgfx_gpu_timer_read(kgfx_device *, kgfx_gpu_timer *, kgfx_gpu_timer_result *);
+void kgfx_gpu_timer_destroy(kgfx_device *, kgfx_gpu_timer *);
 void kgfx_get_stats(const kgfx_device *, kgfx_stats *);
 const char *kgfx_backend_name(void);
 

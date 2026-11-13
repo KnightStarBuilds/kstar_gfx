@@ -13,7 +13,21 @@ function(kgfx_add_asset_tools)
             "${KSTAR_GFX_HOST_TOOLS}/Release" NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH REQUIRED)
         add_executable(kgfx_asset_cooker IMPORTED GLOBAL)
         set_target_properties(kgfx_asset_cooker PROPERTIES IMPORTED_LOCATION "${host_cooker}")
+        find_program(host_lighting_cooker NAMES kgfx_lighting_cooker HINTS "${KSTAR_GFX_HOST_TOOLS}/bin/Release"
+            "${KSTAR_GFX_HOST_TOOLS}/Release" NO_DEFAULT_PATH NO_CMAKE_FIND_ROOT_PATH REQUIRED)
+        add_executable(kgfx_lighting_cooker IMPORTED GLOBAL)
+        set_target_properties(kgfx_lighting_cooker PROPERTIES IMPORTED_LOCATION "${host_lighting_cooker}")
         return()
+    endif()
+    kgfx_tool_source(xatlas xatlas_src)
+    add_executable(kgfx_lighting_cooker "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../tools/lighting_cooker.cpp"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/demos/showcase_world.cpp"
+        "${CMAKE_CURRENT_FUNCTION_LIST_DIR}/../src/demos/lighting_cpu.cpp"
+        "${xatlas_src}/source/xatlas/xatlas.cpp")
+    target_include_directories(kgfx_lighting_cooker SYSTEM PRIVATE "${xatlas_src}/source/xatlas")
+    target_compile_definitions(kgfx_lighting_cooker PRIVATE XA_MULTITHREADED=0)
+    if(NOT MSVC)
+        target_compile_options(kgfx_lighting_cooker PRIVATE -ffp-contract=off $<$<CONFIG:Debug>:-O2>)
     endif()
     foreach(name IN ITEMS cgltf stb tinyexr mikktspace)
         kgfx_tool_source(${name} ${name}_src)
@@ -58,14 +72,38 @@ function(kgfx_prepare_assets output_variable)
             --manifest "${root}/assets/manifest.json"
         DEPENDS kgfx_asset_cooker ${inputs} "${root}/assets/manifest.json"
             "${root}/tools/asset_cooker.cpp" "${root}/tools/include/kgfx_asset_format.h"
-            "${root}/tools/cook_assets.py"
+            "${root}/tools/cook_assets.py" "${root}/tools/authored_effects.py" "${root}/tools/lighting_lookup.py" "${root}/tools/cook_lock.py"
         VERBATIM COMMENT "Cooking verified model textures and floating-point image-based lighting")
     add_custom_target(kgfx_assets DEPENDS "${cooked}/cook.stamp")
+    add_custom_target(kgfx_lighting_assets
+        COMMAND "${Python3_EXECUTABLE}" "${root}/tools/cook_lighting.py"
+            --cooker $<TARGET_FILE:kgfx_lighting_cooker> --output "${cooked}"
+        BYPRODUCTS "${cooked}/lighting/cook.stamp"
+        DEPENDS kgfx_lighting_cooker "${cooked}/cook.stamp"
+        VERBATIM COMMENT "Verifying and baking Static directional lightmaps and irradiance probes")
+    add_dependencies(kgfx_assets kgfx_lighting_assets)
+    # VDB source archives and their verified cook cache survive build cleaning.
+    # The converter and its pinned OpenVDB dependencies are host tools only.
+    set(volume_options)
+    if(KSTAR_GFX_OFFLINE)
+        list(APPEND volume_options --offline)
+    endif()
+    add_custom_target(kgfx_volumes
+        COMMAND "${Python3_EXECUTABLE}" "${root}/tools/cook_volumes.py"
+            --root "${root}" --source "${source}" --output "${cooked}"
+            --host-build "${CMAKE_BINARY_DIR}/host-volumes" ${volume_options}
+        BYPRODUCTS "${cooked}/effects/volumes/cook.stamp"
+        VERBATIM COMMENT "Verifying and cooking pinned CC0 VDB simulations with host OpenVDB")
+    add_dependencies(kgfx_assets kgfx_volumes)
     if(BUILD_TESTING)
+        add_test(NAME kgfx_scene_catalog COMMAND "${Python3_EXECUTABLE}" "${root}/tools/test_scene_catalog.py")
         add_test(NAME kgfx_acquisition COMMAND "${Python3_EXECUTABLE}" "${root}/tools/test_acquisition.py" --cmake "${CMAKE_COMMAND}")
         add_test(NAME kgfx_fork_sources COMMAND "${Python3_EXECUTABLE}" "${root}/tools/test_fork_sources.py")
         add_test(NAME kgfx_resource_packaging COMMAND "${Python3_EXECUTABLE}" "${root}/tools/test_packaging.py")
+        add_test(NAME kgfx_baked_lighting COMMAND "${Python3_EXECUTABLE}" "${root}/tools/test_lighting.py" "${cooked}")
         add_test(NAME kgfx_cooked_assets COMMAND "${Python3_EXECUTABLE}" "${root}/tools/test_assets.py" "${cooked}")
+        add_test(NAME kgfx_volumes COMMAND "${Python3_EXECUTABLE}" "${root}/tools/test_volumes.py" --cooked "${cooked}")
+        set_tests_properties(kgfx_volumes PROPERTIES TIMEOUT 120 LABELS "assets")
         set_tests_properties(kgfx_cooked_assets PROPERTIES TIMEOUT 120 LABELS "assets")
     endif()
     set(${output_variable} "${cooked}" PARENT_SCOPE)

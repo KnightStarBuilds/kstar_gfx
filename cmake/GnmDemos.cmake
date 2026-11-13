@@ -50,8 +50,9 @@ if(KSTAR_GFX_BUILD_DEMOS)
   if(NOT IS_DIRECTORY "${KSTAR_GFX_HOST_RESOURCES}")
     message(FATAL_ERROR "GNM demos need KSTAR_GFX_HOST_RESOURCES; cook assets and compile shaders on the host first")
   endif()
-  add_executable(kstar_gfx_demo src/gnm/demo_main.cpp src/gnm/demo_runtime.cpp src/demos/demo.cpp src/demos/assets.cpp)
-  target_include_directories(kstar_gfx_demo PRIVATE tools/include)
+  add_executable(kstar_gfx_demo src/gnm/demo_main.cpp src/gnm/demo_runtime.cpp src/demos/demo.cpp src/demos/assets.cpp
+    src/demos/showcase_world.cpp src/demos/lighting_cpu.cpp src/demos/showcase_renderer.cpp)
+  target_include_directories(kstar_gfx_demo PRIVATE tools/include "${KGFX_SCENE_INCLUDE_DIR}" "${KSTAR_GFX_HOST_RESOURCES}/shaders")
   target_link_libraries(kstar_gfx_demo PRIVATE kstar_gfx SceSystemService ScePad SceUserService)
   kgfx_ps4_package(kstar_gfx_demo)
   add_custom_target(kgfx_gnm_demo_resources

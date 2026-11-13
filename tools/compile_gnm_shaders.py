@@ -3,6 +3,7 @@
 """Compile shared GLSL to validated base-PS4 shader packages, entirely offline."""
 import argparse,hashlib,json,os,pathlib,subprocess,sys,tempfile
 from validate_gnm_shader import validate
+from shader_source import expand
 from package_gnm_shader import compile_package, verify_compiler_provenance
 ROOT=pathlib.Path(__file__).resolve().parents[1]
 
@@ -24,11 +25,12 @@ def main():
     sources=[a.source/name for name in a.names] if a.names else sorted(list(a.source.glob('*.vert'))+list(a.source.glob('*.frag')))
     if not sources:raise RuntimeError('No vertex/fragment shaders in '+str(a.source))
     a.output.mkdir(parents=True,exist_ok=True);scratch=ROOT/'.tmp';scratch.mkdir(exist_ok=True)
-    provenance={name:sha(path) for name,path in tools.items()};provenance['compiler_build']=sha(tools['psbc'].parent/'build-provenance.json');provenance['shader_driver']=sha(pathlib.Path(__file__));provenance['gnm_specialization']=sha(ROOT/'tools/prepare_gnm_shader.py');provenance['reflection_driver']=sha(ROOT/'tools/shader_metadata.py');provenance['toolchain_lock']=sha(ROOT/'deps/toolchain-lock.json');provenance['native_validation']=sha(ROOT/'tools/validate_gnm_shader.py');provenance['native_packaging']=sha(ROOT/'tools/package_gnm_shader.py')
+    provenance={name:sha(path) for name,path in tools.items()};provenance['compiler_build']=sha(tools['psbc'].parent/'build-provenance.json');provenance['shader_driver']=sha(pathlib.Path(__file__));provenance['gnm_specialization']=sha(ROOT/'tools/prepare_gnm_shader.py');provenance['reflection_driver']=sha(ROOT/'tools/shader_metadata.py');provenance['toolchain_lock']=sha(ROOT/'deps/toolchain-lock.json');provenance['native_validation']=sha(ROOT/'tools/validate_gnm_shader.py');provenance['native_packaging']=sha(ROOT/'tools/package_gnm_shader.py');provenance['include_driver']=sha(ROOT/'tools/shader_source.py')
     psbc_provenance=tools['psbc'].parent/'build-provenance.json'
     for source in sources:
         if source.suffix not in ['.vert','.frag']:raise RuntimeError('Only vertex/fragment stages are supported: '+str(source))
-        fingerprint=dict(provenance,source=sha(source),configuration=a.config)
+        expanded=expand(source)
+        fingerprint=dict(provenance,source=sha(source),expanded_source=hashlib.sha256(expanded.encode()).hexdigest(),configuration=a.config)
         old=a.output/(source.name+'.native-package.json')
         if old.is_file():
             try:metadata=json.loads(old.read_text())
@@ -39,7 +41,8 @@ def main():
                 print('Reusing verified base-PS4 shader '+source.name);continue
         with tempfile.TemporaryDirectory(prefix='gnm-shader-',dir=scratch) as directory:
             stage=pathlib.Path(directory);base=stage/source.name;spv=pathlib.Path(str(base)+'.spv');gnm=pathlib.Path(str(base)+'.gnm.glsl');native_spv=pathlib.Path(str(base)+'.gnm.spv');reflection=pathlib.Path(str(base)+'.json');header=pathlib.Path(str(base)+'.h');binary=pathlib.Path(str(base)+'.sb')
-            run([tools['glslang'],'-V','--target-env','vulkan1.0',source.resolve(),'-o',spv])
+            expanded_path=stage/(source.name+'.expanded.glsl');expanded_path.write_text(expanded)
+            run([tools['glslang'],'-V','--target-env','vulkan1.0','-S',source.suffix[1:],expanded_path,'-o',spv])
             run([tools['spirv-val'],'--target-env','vulkan1.0',spv])
             run([sys.executable,ROOT/'tools/prepare_gnm_shader.py',source.resolve(),gnm])
             run([tools['glslang'],'-V','--target-env','vulkan1.0','-S',source.suffix[1:],gnm,'-o',native_spv])
@@ -50,7 +53,7 @@ def main():
             compile_package(tools['psbc'],native_spv,'vertex' if source.suffix=='.vert' else 'fragment',binary)
             data=binary.read_bytes()
             validate(data)
-            artifacts={path.name:sha(path) for path in stage.iterdir() if path.is_file() and path!=gnm}
+            artifacts={path.name:sha(path) for path in stage.iterdir() if path.is_file() and path not in (gnm,expanded_path)}
             for name in artifacts:
                 destination=a.output/name
                 if not destination.exists() or sha(destination)!=artifacts[name]:os.replace(stage/name,destination)

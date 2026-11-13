@@ -48,5 +48,5 @@ struct Resources {
 std::vector<uint8_t> read_file(const std::filesystem::path&);
 Mesh make_cube(Resources&);
 Mesh make_sphere(Resources&,uint32_t slices=48,uint32_t stacks=32);
-Mesh make_plane(Resources&);
+Mesh make_plane(Resources&,float uv_repeat=1);
 }

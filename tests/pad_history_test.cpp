@@ -20,7 +20,7 @@ int main() {
   // A short Escape/Options tap can finish while a slow GPU frame is pending.
   const Report tap[] = {{options, true, 80}, {0, true, 145}};
   ok &= check(history.consume(tap, 2) == options,
-              "press followed by release between frames must still quit");
+              "press followed by release between frames must still open settings");
   ok &= check(history.current.buttons == 0 && history.current.stick == 145,
               "analog input must come from the newest report");
   ok &= check(history.consume(nullptr, 0) == 0 && history.current.stick == 145,
@@ -33,8 +33,20 @@ int main() {
   ok &= check(history.consume(reconnect, 2) == triangle &&
                   history.current.connected && history.current.stick == 128,
               "reconnecting must reset old button state and use new analog input");
-  const Report quit_disconnect[] = {{options, true, 128}, {0, false, 0}};
-  ok &= check(history.consume(quit_disconnect, 2) == options,
-              "a disconnect must not erase a queued quit request");
+  const Report menu_disconnect[] = {{options, true, 128}, {0, false, 0}};
+  ok &= check(history.consume(menu_disconnect, 2) == options,
+              "a disconnect must not erase a queued menu request");
+  constexpr uint32_t modifier=1u<<1;
+  const Report chord[]={{modifier,true,128},{modifier|triangle,true,128},{0,true,128}};
+  ok &= check(history.consume(chord,3,modifier)==(modifier|triangle)&&
+                  history.modified_pressed==(modifier|triangle),
+              "lighting chords must preserve the modifier at the original button edge");
+  const Report after_release[]={{modifier,true,128},{0,true,128},{triangle,true,128}};
+  history.consume(after_release,3,modifier);
+  ok &= check(!(history.modified_pressed&triangle),
+              "a button pressed after modifier release must keep its ordinary meaning");
+  history.consume(nullptr,0,modifier);
+  ok &= check(history.modified_pressed==0,
+              "empty polls must not repeat a lighting chord");
   return ok ? 0 : 1;
 }

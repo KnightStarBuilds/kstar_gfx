@@ -216,6 +216,19 @@
       "kind": "submodule",
       "path": "deps/opengnm",
       "revision_role": "Initial gitlink; active checkout and working-tree content are recorded by each build"
+    },
+    {
+      "name": "xatlas",
+      "repository": "https://github.com/jpcy/xatlas",
+      "revision": "f700c7790aaa030e794b52ba7791a05c085faf0c",
+      "url": "https://codeload.github.com/jpcy/xatlas/tar.gz/f700c7790aaa030e794b52ba7791a05c085faf0c",
+      "sha256": "57b56dbedab3bf0a487e4c0ed3cc3fe79210d4a008d59a8326af59196a3487eb",
+      "licenses": [
+        {
+          "source": "LICENSE",
+          "destination": "xatlas.txt"
+        }
+      ]
     }
   ]
 }

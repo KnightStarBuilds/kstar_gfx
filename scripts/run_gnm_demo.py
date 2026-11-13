@@ -19,6 +19,10 @@ import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from scene_catalog import load as load_scene_catalog
+SCENE_CATALOG = load_scene_catalog()
+SCENES = {scene["id"]: scene for scene in SCENE_CATALOG["scenes"]}
 
 
 class ValidationError(RuntimeError):
@@ -129,7 +133,7 @@ def prepare_profile(profile, inputs, *, headless):
                 continue
             text = mapping.read_text()
             if not re.search(r"^\s*options\s*=\s*escape\s*(?:#.*)?$", text, re.MULTILINE):
-                mapping.write_text(text.rstrip()+"\n\n# kstar_gfx: Escape quits through the native Options action.\noptions = escape\n")
+                mapping.write_text(text.rstrip()+"\n\n# kstar_gfx: Escape opens settings through the native Options action.\noptions = escape\n")
     return {"path": str(home), "user_ids": sorted(user_ids),
             "configuration_sha256": sha256(path)}
 
@@ -176,6 +180,19 @@ def validate_pixels(image, scene, diagnostic="shaded"):
             expected = (255*red, 255*green, 255*(1-red-green))
             if any(abs(a-b) > 4 for a, b in zip(pixel(x, y), expected)):
                 raise ValidationError("Triangle interpolation/orientation mismatch")
+    elif diagnostic == "depth":
+        if any(max(pixels[i:i+3])-min(pixels[i:i+3]) > 1 for i in range(0,len(pixels),3)) or max(pixels)-min(pixels) < 32:
+            raise ValidationError("Linear depth output is not grayscale geometry")
+    elif diagnostic == "layers":
+        palette=((6,6,6),(13,166,115),(38,115,255))
+        counts=[0,0,0]
+        for i in range(0,len(pixels),3):
+            errors=[max(abs(a-b) for a,b in zip(pixels[i:i+3],color)) for color in palette]
+            which=min(range(3),key=errors.__getitem__)
+            if errors[which]>1:raise ValidationError("Unexpected refractive-layer diagnostic color")
+            counts[which]+=1
+        if counts[0]==0 or counts[1]+counts[2]==0:
+            raise ValidationError("Layer capture lacks opaque background or refractive interfaces")
     else:
         colors = {bytes(pixel(x, y)) for y in range(0, height, 3)
                   for x in range(0, width, 3)}
@@ -273,16 +290,22 @@ def main(argv=None, *, presentation_default=False):
     presentation.add_argument("--present", dest="headless", action="store_false",
                               help="Show the native VideoOut output and enable controller input")
     parser.set_defaults(headless=not presentation_default)
-    parser.add_argument("--scene", default="pbr" if presentation_default else "triangle", choices=("triangle", "cubes", "pbr", "instances", "offscreen", "stress"))
-    parser.add_argument("--view", default="overview", choices=("overview", "rifle", "hat"))
+    parser.add_argument("--scene", default=SCENE_CATALOG["default"] if presentation_default else "triangle", choices=tuple(SCENES))
+    parser.add_argument("--view", default="overview", choices=sorted({view for scene in SCENES.values() for view in scene["views"]}))
+    parser.add_argument("--sequence", default="idle", choices=sorted({sequence for scene in SCENES.values() for sequence in scene["sequences"]}))
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--preset", choices=("cinematic", "quality", "performance"), default=None)
     parser.add_argument("--environment", type=int, choices=(0, 1), default=0)
-    diagnostics = ("shaded", "normals", "albedo", "material", "shadows")
+    diagnostics = ("shaded", "normals", "albedo", "material", "shadows", "depth", "layers", "overflow",
+                   "baked", "bounce", "wetness", "roughness", "probes", "timers")
     parser.add_argument("--diagnostic", choices=diagnostics, default="shaded")
     duration = parser.add_mutually_exclusive_group()
     duration.add_argument("--frames", type=int)
     duration.add_argument("--seconds", type=float, help="Opt-in visible session duration after scene loading; otherwise quit manually")
     parser.add_argument("--width", type=int)
     parser.add_argument("--height", type=int)
+    parser.add_argument("--samples", type=int, choices=(1, 4), default=4)
+    parser.add_argument("--shadow-size", type=int, choices=(1024, 2048), default=2048)
     parser.add_argument("--timeout", type=float,
                         help="Process deadline allowance in seconds (default: 120 for bounded runs; none for interactive runs)")
     parser.add_argument("--reference", type=Path)
@@ -330,8 +353,12 @@ def main(argv=None, *, presentation_default=False):
         parser.error("--seconds requires a visible session and a duration within 0..600")
     if args.timeout is not None and (not math.isfinite(args.timeout) or not 1 <= args.timeout <= 3600):
         parser.error("Timeout must be between 1 and 3600 seconds")
-    if args.view != "overview" and args.scene != "pbr":
-        parser.error("Close views require the PBR scene")
+    if args.diagnostic in ("depth", "layers", "overflow") and not SCENES[args.scene]["walkthrough"]:
+        parser.error("Depth/layer diagnostics require a walkthrough scene")
+    if args.view not in SCENES[args.scene]["views"]:
+        parser.error("View is unavailable in the selected scene")
+    if args.sequence not in SCENES[args.scene]["sequences"] or not 0 <= args.seed <= 0xffffffff:
+        parser.error("Invalid scene sequence or seed")
     if args.reference and (not args.headless or args.frames is None):
         parser.error("Reference comparisons require deterministic --headless --frames runs")
     resize_extra = 16 if args.scene == "stress" and args.frames and ((args.frames-1)//60)%2 else 0
@@ -373,10 +400,11 @@ def main(argv=None, *, presentation_default=False):
     result = {"status": "preparing", "scope": "shared GNM offscreen GPU output" if args.headless else "shared GNM presentation session",
               "configuration": args.config, "headless": args.headless,
               "scene": args.scene, "view": args.view, "environment": args.environment,
-              "diagnostic": args.diagnostic,
+              "diagnostic": args.diagnostic, "sequence": args.sequence, "seed": args.seed, "preset": args.preset,
               "emulator": str(args.emulator), "emulator_sha256": sha256(args.emulator),
               "elf": str(args.elf), "elf_sha256": sha256(args.elf),
               "width": args.width, "height": args.height, "frames": args.frames,
+              "initial_quality": {"msaa": args.samples, "shadow_size": args.shadow_size},
               "seconds": args.seconds, "timeout_seconds": None if args.timeout is None else args.timeout + (args.seconds or 0), "readbacks_mode": 2,
               "emulator_profile_source": str(args.emulator_profile) if args.emulator_profile else None,
               "observations": {"window_content": "not automatically assessed", "controller_response": "not automatically assessed"},
@@ -420,7 +448,12 @@ def main(argv=None, *, presentation_default=False):
                    "--demo", args.scene, "--view", args.view,
                    "--environment", str(args.environment), "--diagnostic", args.diagnostic,
                    "--width", str(args.width), "--height", str(args.height),
+                   "--samples", str(args.samples), "--shadow-size", str(args.shadow_size),
                    "--output", "/data/captures/"+capture_name]
+        if SCENES[args.scene]["walkthrough"]:
+            command += ["--sequence", args.sequence, "--seed", str(args.seed)]
+        if args.preset:
+            command += ["--preset", args.preset]
         if args.frames:
             command += ["--frames", str(args.frames), "--capture-frame", str(args.frames)]
         elif args.seconds is not None:
@@ -471,6 +504,10 @@ def main(argv=None, *, presentation_default=False):
         metadata = json.loads(metadata_path.read_text())
         if args.scene == "stress" and args.seconds:
             expected_dimensions = (args.width+16, args.height+16) if ((metadata.get("capture_frame", 1)-1)//60)%2 else (args.width, args.height)
+        # Interactive settings can change render dimensions before a final
+        # capture. Headless comparisons retain the requested fixed dimensions.
+        if not args.headless:
+            expected_dimensions = (metadata.get("width"), metadata.get("height"))
         if image[:2] != expected_dimensions:
             raise ValidationError("GPU capture has unexpected dimensions")
         if metadata.get("capture_source") != "completed GPU LDR render target":
@@ -478,8 +515,14 @@ def main(argv=None, *, presentation_default=False):
         checks = [("demo", args.scene), ("view", args.view)]
         if args.frames:
             checks += [("frames", args.frames), ("capture_frame", args.frames)]
+            if SCENES[args.scene]["walkthrough"]:
+                checks += [("scene_tick", args.frames), ("seed", args.seed), ("sequence", args.sequence)]
         if args.headless:
             checks += [("environment", args.environment), ("diagnostic", diagnostics.index(args.diagnostic))]
+            quality = metadata.get("quality", {})
+            if (quality.get("msaa") != (1 if args.scene == "triangle" else args.samples)
+                    or quality.get("shadow_size") != (0 if args.scene == "triangle" else args.shadow_size)):
+                raise ValidationError("Capture quality settings differ from the requested settings")
         else:
             checks += [("presentation_enabled", True)]
         for key, expected in checks:

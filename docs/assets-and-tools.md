@@ -1,14 +1,98 @@
 # Assets and offline tools
 
-`assets/manifest.json` locks the requested Poly Haven models and environments.
+`assets/manifest.json` locks the requested Poly Haven models, industrial surface materials and environments.
 Source payloads live in ignored `assets/source/`, retaining per-model folders and
 relative names. All material maps use 2048×2048 PNG, and both environments use
 2048×1024 floating-point EXR. Acquisition verifies SHA256 over the actual file;
 Poly Haven's MD5 metadata is not used as the integrity check.
 
+The ground uses [Rock Tile Floor](https://polyhaven.com/a/rock_tile_floor) by
+Charlotte Baglioni (CC0), with one texture repeat spanning 2 m. Its 2K diffuse,
+OpenGL normal and packed AO/roughness/metalness PNGs follow the same immutable
+source and SHA256 manifest path as the models. The cooker emits
+`textures/rock_tile_floor_{diff,nor_gl,arm}_2k.kgtex`, retaining all 12 mip levels.
+Albedo filtering uses linear light before sRGB encoding; normal mips are
+renormalized, and ARM channels stay linear. No displacement map is used.
+
+The industrial slice adds [Modular Industrial Pipes](https://polyhaven.com/a/modular_industrial_pipes_01)
+and [Barrel 01](https://polyhaven.com/a/Barrel_01) by Jorge Camacho,
+[Power Box 01](https://polyhaven.com/a/power_box_01) by Rico Cilliers and Yann Kervran,
+and [Painted Concrete](https://polyhaven.com/a/concrete_floor_painted) and
+[Rusty Metal 02](https://polyhaven.com/a/rusty_metal_02) by Rob Tuytel. These CC0
+payloads retain their original names, author records, upstream file revisions,
+SHA256 hashes and acquisition sizes in the manifest. Industrial surfaces use the
+same 2K diffuse/normal/ARM path as the existing floor material.
+
+The manifest's `cook` records select model, material and environment outputs.
+The pipe kit additionally emits eight reusable `modular_industrial_pipes_01_pipeNN.kgmodel`
+components. Component extraction retains the node rotation and scale while
+removing the display-layout translation; the complete kit is also retained.
+This uses the existing version 2 model format without a runtime import step.
+
+`tools/authored_effects.py` generates original MIT-licensed fire, smoke and spray
+flipbooks, sparks, tileable water normals, foam and grime directly into KGTEX.
+The three flipbooks use 512² atlases with sixteen 128² cells, top-left row-major
+frame order and 16 fps playback metadata in `effects/atlas.json`. Transparent
+padding and bounded mips prevent neighboring frame bleed. Other effect textures
+are 256². The cooker hashes this generator alongside its other implementation
+inputs; effect assets are generated offline and verified with the package.
+
+`effects/surface_masks.kgtex` adds four independently authored material masks in
+a 512² atlas: porous wet patches, leaks, footprints and grime. Its linear RGBA
+channels contain wetness, roughness variation, relief and coverage. Material UV
+scale/offset is independent of the base texture; projected decals use the same
+mask cells with their own receiver filters and layer ordering.
+
+`assets/volume-manifest.json` pins the original JangaFX Small Camp Fire, Simple
+Fire and Industrial Chimney Smoke archives, with SHA256, byte counts, stable
+download pages and [CC0 permission](https://jangafx.com/software/embergen/download/free-vdb-animations).
+The archives total approximately 1.27 GiB and stay in ignored
+`assets/source/volumes/`. Acquisition resumes partial transfers and publishes
+only verified archives. The selected sixteen frames retain their archive paths.
+The Simple Fire RAR uses host `bsdtar`; it does not require Blender.
+
+`tools/build_volume_converter.py` builds OpenVDB 12.1.1, oneTBB 2022.2.0 and
+Blosc 1.21.6 from hash-pinned archives in `deps/volume-toolchain-lock.json`.
+Immutable sources live in `deps/cache/`; generated copies and host binaries live
+under the selected `build/<platform>-<arch>/host-volumes/` tree. OpenVDB and its
+dependencies are used only by the converter and are absent from runtime/PS4
+linkage. Licenses are retained in `deps/volume-licenses/` and packaged notices.
+
+`tools/cook_volumes.py` converts the actual VDB fields to
+`effects/volumes/{small_campfire,simple_fire,chimney_smoke}/`. Each volume has a
+1088×544 RGBA8 slice atlas containing sixteen 32³ frames, with one replicated
+texel around each slice. Density, flame and temperature remain linear data;
+the converter rotates source Z-up into the renderer's Y-up convention and uses
+one bounding box for the whole sequence. Three endpoint frames crossfade to the
+first frame, removing the loop discontinuity. A 128² distant flipbook preserves
+mean column density/flame/temperature for the same lighting and extinction
+calculation. It blends with spatial slices from 35–50 m when viewed along the
+authored projection axis; oblique views retain spatial slices.
+
+The three effects occupy 7,299,072 resident texture bytes. These atlases have one
+mip level, with explicit interpolation across spatial slices and animation
+frames. The sixteen-frame 32³ conversion is a bounded approximation of the
+downloaded simulations. `effects/volumes/cook.stamp` separately records cook
+identity and all output hashes. Native resource copying and PS4 package
+validation merge this stamp with the model/material cook stamp. Cached normal
+builds and clean builds can reuse these outputs offline without rebuilding
+OpenVDB, while missing/corrupt archives fail explicitly in offline mode.
+
+```sh
+python3 tools/cook_volumes.py --offline
+python3 tools/build_volume_converter.py --offline --config Release
+python3 tools/test_volumes.py --cooked assets/cooked
+```
+
+`assets/scenes.json` supplies scene IDs, titles, allowed views, deterministic
+sequence names and required cooked resources. CMake generates
+`kgfx_scene_catalog.hpp` for both demo hosts. Python launchers and tests read the
+same catalog, and PS4 packaging verifies its identity and required assets.
+Library-only builds do not require the catalog or Python.
+
 The glTF source describes JPEG images. The cooker deliberately resolves their
 lossless PNG counterparts, leaving the source unchanged. The separate rifle
-accessory alpha map is applied only to the glass material. Both models retain
+accessory alpha map is applied only to the glass material. All models retain
 all source triangles, materials and double-sided settings. Missing tangents are
 generated with MikkTSpace; vertices are reindexed only after tangent generation.
 
@@ -37,11 +121,33 @@ using 1024 samples and correlated Smith visibility. Cube order is +X, -X, +Y, -Y
 they contain no glTF/image/EXR decoders or environment baking.
 
 `assets/cooked/` survives build cleaning. Its stamp records source/tool hashes and
-checksums of all outputs. Cooking happens under an exclusive directory lock and
-stages results before publication. An interrupted cook can leave `cook.lock`;
-remove that directory only after verifying that no cooker is running. Reuse
+checksums of all outputs. Cooking happens under an exclusive process-scoped
+file lock and stages results before publication. The OS releases the lock when
+a converter exits or is killed, so the next cook can resume automatically. Reuse
 validates output checksums; source files and existing payload timestamps remain
 unchanged. A successful reuse may update the stamp to satisfy incremental builds.
+
+`tools/cook_lighting.py` independently fingerprints and verifies the lighting
+bake, so changing the room does not recook all model textures and HDRIs.
+`kgfx_lighting_cooker` uses pinned xatlas and portable CPU ray tracing, without
+Blender. The current room unwraps 113 static cube receivers into a 309×312 base
+atlas. Twelve directional fields occupy a 1236×936 RGBA32F texture; static curved
+and imported receivers retain six-lobe per-object fallback data. Imported mesh
+triangles participate in visibility tracing. Static sources alone supply three
+diffuse bounces; Rect sources sample their actual emitting surface.
+
+`lighting/industrial.kglight` stores versioned probe/surface data,
+`industrial.kglmap` stores object UV mappings and scene identity, and
+`industrial_lightmap.kgtex` stores directional fields. `lighting/cook.stamp`
+tracks all three hashes separately. Resource and PS4 packages merge model,
+lighting and volume stamps. Runtime rejects stale geometry, material membership,
+Static light edits and changed imported mesh bytes. Existing model files remain
+version 2. Dynamic-only scenes never load the baked companion.
+
+The LTC fit is pinned to selfshadow/ltc_code commit
+`31e5e96b54f98f33098f8503003119ba2231a1c6`, with its license retained in
+`deps/ltc-LICENSE.txt`. `tools/lighting_lookup.py` packs the BRDF and both LTC
+tables into one 256×384 floating-point texture to conserve runtime bindings.
 
 `deps/toolchain-lock.json` separately pins offline compilers, asset libraries and
 PSBC build prerequisites. Other source archives and extracted caches are never
@@ -60,6 +166,13 @@ SPIRV-Cross generates GLSL 410 without the unsupported 420pack extension.
 The OpenGL implementation binds uniform blocks and samplers by `kgfx_uN` and
 `kgfx_tN` names. Reflection emits logical binding constants, descriptor bindings,
 layout hashes and optional C/C++ consumer-struct layout assertions.
+
+Shared local `#include` files are expanded by `tools/shader_source.py` before
+both target compilations. Cycles and parent-directory traversal are rejected.
+CMake tracks shared GLSL files, and shader packages record the expanded-source
+hash plus the individual source dependencies. Native incremental compilation
+and PS4 packaging reject stale include content. Reflected host-layout checks
+cover uniform arrays as well as scalar and matrix members.
 
 Separate `.gnm.spv` artifacts apply the common OpenGL clip-space depth convention
 to native GNM at compile time. GNM `.sb` binaries require the PSBC fork host
@@ -99,6 +212,9 @@ fork identities and hashes of the embedded resolve source, SPIR-V and native pac
 The build and package drivers use this interface:
 
 ```sh
+build/macos-arm64/bin/Release/kgfx_asset_cooker texture normal \
+  assets/source/textures/rock_tile_floor/rock_tile_floor_nor_gl_2k.png \
+  .tmp/rock_tile_floor_nor_gl_2k.kgtex
 python3 tools/build_psbc.py --build-dir build/macos-arm64/psbc-src --offline
 python3 tools/compile_gnm_shaders.py --host-tools build/macos-arm64 \
   --psbc build/macos-arm64/psbc-src/opengnm-psbc --source shaders \
@@ -125,6 +241,7 @@ Verification commands:
 ```sh
 python3 tools/test_acquisition.py
 python3 tools/test_assets.py assets/cooked
+python3 tools/test_scene_catalog.py
 build/macos-arm64/bin/Debug/kgfx_asset_cooker --self-test
 build/macos-arm64/bin/Release/kgfx_asset_cooker --self-test
 ```

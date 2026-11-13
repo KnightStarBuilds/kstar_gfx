@@ -51,7 +51,7 @@ class Profiles(unittest.TestCase):
             with self.assertRaises(runner.ValidationError):
                 runner.profile_inputs(source)
 
-    def test_new_profile_has_native_quit_and_controller_bindings(self):
+    def test_new_profile_has_native_menu_and_controller_bindings(self):
         with tempfile.TemporaryDirectory(dir=ROOT / ".tmp") as temporary:
             profile = Path(temporary) / "user"
             runner.prepare_profile(profile, [], headless=False)

@@ -18,6 +18,22 @@ included. Native artifacts identify the actual compiler and fork source content.
 
 ## Build
 
+The lighting/effects revision cross-compiles the demo and 30-feature probe to
+PS4 ELF in Debug and Release. All 28 native shader packages pass validation,
+including the LTC polygon shader's dynamically indexed local-array writes.
+PSBC lowers those temporary arrays before ACO instruction selection; shader
+features are retained. GNM layout, guardband and multisample host checks pass in
+both configurations.
+
+The current ARM64 host cannot execute the SDK's x86-64 `create-fself-macos`, so
+SELF/FPKG packaging is blocked after ELF linking. The available installed and
+maintained-fork shadPS4 binaries are also x86-64 and cannot run in this host
+environment. The new indirect-array readback probe, current scene comparisons,
+focused window input and low-resolution shaft regression therefore remain
+unverified. Historical emulator results below cover earlier renderer revisions;
+they do not validate the new lighting/effects shaders. No installed emulator or
+driver was modified. Physical PS4 remains untested for this revision.
+
 A host LLVM installation with `clang`, `clang++`, `ld.lld`, `llvm-ar`, and `llvm-ranlib` is required for the cross target. Native host tools use Apple Clang through `xcrun` on macOS. The external OpenOrbis SDK pin is recorded in `deps/lock.json`; pass the installed SDK directory explicitly or set `OO_PS4_TOOLCHAIN`.
 
 The SDK's `mode_t` declaration is corrected in the maintained source header
@@ -52,6 +68,89 @@ A CMake consumer can instead select `KSTAR_GFX_BACKEND=GNM` and use `cmake/ps4-t
 
 Release uses supported IPO/ThinLTO for the library, OpenGNM and demo/probe consumers. The LLVM cross-linker accepts native OpenOrbis runtime objects alongside LLVM bitcode. Debug remains an incremental build without IPO.
 
+## Hardware package
+
+Build the full Release demo with the command above before creating the installable
+FPKG. The demo build prepares the gallery and industrial models, their 2K textures,
+the floor/concrete/metal materials, authored effects, both HDRI environments
+and the native GNM shaders. A library-only or probes-only build is insufficient;
+`--offline` requires the dependency and asset caches to be populated already.
+
+From the kstar_gfx root:
+
+```sh
+python3 ps4/package.py --config Release
+```
+
+The packager reads the OpenOrbis SDK location from the configured GNM CMake cache
+and writes
+`build/ps4-x86_64/standalone/pkg/Release/IV0000-KGFX00001_00-KSTARGFXDEMO0000.pkg`.
+The application identifies itself as `KGFX00001`, version `01.01`, and targets
+firmware 9.00 with GoldHEN, matching Nocturne's hardware package configuration.
+Copy the `.pkg` to a USB drive and install it using the console's Package Installer.
+The package contains the native SELF executable, OpenOrbis startup modules,
+cooked assets, native shaders and license notices. shadPS4 is not packaged.
+
+Creation verifies cooked assets and native shader hashes before staging, runs
+LibOrbisPkg integrity checks, and extracts the result to verify its contents.
+The generated SFO retains the application settings and adds only the package
+tool's publishing fields. A SHA256 file, input manifest and validation log are
+written beside the `.pkg`; failed verification preserves the previous package.
+
+Launching the installed application opens the connected facility walkthrough at
+1920×1080 without command-line arguments. Cinematic uses 4× MSAA, 2048-pixel
+shadows and the full effects budget. The menu and D-pad select the other three
+walkthroughs or any of the six legacy demos. Resources load from `/app0/resources`; the default session
+writes no captures and has no timer.
+
+| Controller input | Action |
+| --- | --- |
+| Left stick / right stick | Walk / look |
+| L3 | Sprint |
+| Cross | Interact with the nearby station |
+| Circle | Toggle inspection camera |
+| R3 | Reset walkthrough |
+| D-pad left / right | Previous / next scene |
+| Left stick, L2 / R2 in inspection | Orbit, zoom out / in |
+| Triangle | Switch HDRI environment |
+| Square | Cycle material diagnostics |
+| L1 / R1 | Decrease / increase exposure |
+| Cross in legacy / inspection | Reset |
+| Options | Open or close graphics settings |
+| D-pad, while settings are open | Navigate rows and edit values |
+| Cross, while settings are open | Select the current row |
+| Circle, while settings are open | Return to the demo |
+
+Select **Quit App** inside settings to finish GPU work and exit to the console
+menu. Cinematic and Quality select 1080p / 4× MSAA / 2048² shadows with different
+particle budgets; Performance selects
+720p / 4× MSAA / 1024² shadows. Custom offers 720p, 900p or 1080p, 1× or 4×
+samples, and 1024² or 2048² shadows. Scene, environment, exposure and diagnostics are
+also available. **Apply Changes** replaces internal render targets after GPU
+completion; the native VideoOut buffers retain their initial size. Allocation
+failure keeps the active settings. Preset names do not promise a measured frame
+rate. See [demo settings and controls](demos.md#graphics-settings).
+
+Package creation and emulator validation do not establish successful installation,
+rendering, controller input, exit behavior or performance on physical PS4 hardware.
+Record those checks separately when testing the installed application. The
+current depth, MSAA, menu and floor-material changes require a physical PS4 retest.
+
+### Native raster state
+
+Viewport setup now computes guardband clip limits from the viewport scale and
+offset, keeping raster coordinates inside the signed 16-bit pixel range. This
+addresses the large ground plane extending behind the camera or far outside
+the viewport; the depth test remains enabled and the geometry is unchanged.
+
+Each pass explicitly programs `PA_SC_MODE_CNTL_0.MSAA_ENABLE` together with the
+sample count, EQAA state, sample locations and masks. Four-sample attachments
+alone did not enable native multisample rasterization after firmware state
+initialization. Switching back to a single-sample pass also resets that state.
+Host checks cover these register values; shadPS4 derives raster samples from
+attachments and cannot establish that the hardware enable bit was correct.
+Visual depth and anti-aliasing results still need confirmation on the console.
+
 ## Emulator validation
 
 Use an explicitly selected emulator, as in Nocturne's PS4 workflow. The existing
@@ -67,6 +166,13 @@ Select a fork build with the same `--emulator` option and keep its results separ
 from the installed release. The fork contains the fixes required for correct
 PBR lighting; the installed 0.18.0 binary has known rendering and stability
 failures described in [validation](validation.md).
+
+Walkthrough shaders also require the fork's `S_OR_SAVEEXEC_B64` translation
+(`72f34e5e`). It reuses the existing saved-EXEC helper to preserve the old mask,
+OR the source into EXEC and update SCC. The unhandled scalar opcode previously
+aborted shader recompilation before a walkthrough capture completed. Matching
+Debug/Release fork builds pass the full 29-feature native shader probes; this
+does not change the installed emulator or establish physical-console results.
 
 The user-facing runner resolves the selected build, prepares a complete app0 and
 isolated portable profile, sets an absolute emulator home, and creates home
@@ -89,8 +195,9 @@ Use `--seconds` or `--frames` for bounded validation; those runs retain a defaul
 `--timeout` opts into a process deadline even for an interactive run.
 
 Visible runs exercise VideoOut and controller input. Escape is mapped to the
-native Options button in the copied input profile so the demo can finish and
-release its resources. Untimed runs capture the first frame and write its
+native Options button in the copied input profile to open settings. Select
+**Quit App** with Cross (N in the default keyboard profile) to finish and release
+resources. Untimed runs capture the first frame and write its
 metadata on guest exit; timed runs capture the final frame. Closing the window terminates the emulator through its
 normal host-window path. A window close before a capture does not establish
 rendering correctness. `--headless` is reserved for offscreen pixel comparisons;
